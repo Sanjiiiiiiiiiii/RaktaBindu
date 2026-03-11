@@ -14,7 +14,7 @@ $uid = (int)$_SESSION['user_id'];
 
 $success = "";
 $error = "";
-
+///ada
 // mark all read
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST["action"] ?? "") === "mark_all") {
   $u = $conn->prepare("UPDATE notifications SET is_read=1 WHERE user_id=? AND is_read=0");
