@@ -6,7 +6,7 @@ ini_set('display_errors', 1);
 date_default_timezone_set("Asia/Kathmandu");
 require_once __DIR__ . "/db.php";
 
-// ✅ must be logged in
+// must be logged in
 if (!isset($_SESSION['user_id'])) {
   header("Location: login.php");
   exit();
@@ -19,14 +19,12 @@ $avatarLetter = strtoupper(mb_substr($userName, 0, 1));
 $success = "";
 $error = "";
 
-// ✅ Cancel request (only pending)
+// cancel request (only pending)
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"], $_POST["request_id"])) {
   $action = $_POST["action"];
   $rid = (int)$_POST["request_id"];
 
   if ($action === "cancel") {
-    // NOTE: This assumes blood_requests has a 'status' column.
-    // If your column name is different, change status='Cancelled'.
     $up = $conn->prepare("
       UPDATE blood_requests
       SET status='Cancelled'
@@ -39,16 +37,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"], $_POST["req
       if ($up->execute() && $up->affected_rows > 0) {
         $success = "Request cancelled successfully.";
       } else {
-        $error = "Unable to cancel (maybe already approved/completed).";
+        $error = "Unable to cancel (maybe already accepted/completed).";
       }
       $up->close();
     }
   }
 }
 
-// ✅ Fetch my requests
-// Assumes columns exist: id, user_id, blood_group, quantity, hospital_location, urgency, needed_date, needed_time, patient_notes, status, created_at
-// If your table doesn’t have status/created_at, see the notes below.
+// fetch my requests
 $stmt = $conn->prepare("
   SELECT
     id,
@@ -68,7 +64,6 @@ $stmt = $conn->prepare("
 
 $requests = [];
 if (!$stmt) {
-  // fallback if created_at column doesn't exist
   $stmt2 = $conn->prepare("
     SELECT
       id,
@@ -102,12 +97,44 @@ if (!$stmt) {
   $stmt->close();
 }
 
-function esc($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+// fetch accepted donors for my requests
+$acceptedDonors = [];
+$ad = $conn->prepare("
+  SELECT
+    br.id AS request_id,
+    br.blood_group,
+    br.hospital_location,
+    rm.accepted_at,
+    u.id AS donor_id,
+    CONCAT(TRIM(COALESCE(u.firstName,'')), ' ', TRIM(COALESCE(u.lastName,''))) AS donor_name,
+    u.email AS donor_email,
+    u.phone AS donor_phone
+  FROM blood_requests br
+  INNER JOIN request_matches rm ON rm.request_id = br.id
+  INNER JOIN users u ON u.id = rm.donor_id
+  WHERE br.user_id = ?
+    AND rm.status = 'Accepted'
+  ORDER BY rm.accepted_at DESC, br.id DESC
+");
+
+if ($ad) {
+  $ad->bind_param("i", $uid);
+  if ($ad->execute()) {
+    $res = $ad->get_result();
+    while ($row = $res->fetch_assoc()) {
+      $acceptedDonors[] = $row;
+    }
+  }
+  $ad->close();
+}
+
+function esc($v) {
+  return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
 
 function badgeClass($status) {
   $s = strtolower(trim((string)$status));
-  if ($s === "approved") return "badge badge-ok";
-  if ($s === "completed") return "badge badge-ok";
+  if ($s === "approved" || $s === "accepted" || $s === "completed") return "badge badge-ok";
   if ($s === "pending" || $s === "") return "badge badge-warn";
   if ($s === "cancelled") return "badge badge-bad";
   return "badge";
@@ -133,6 +160,8 @@ function badgeClass($status) {
       --line:rgba(0,0,0,.08);
       --shadow2:0 10px 30px rgba(0,0,0,.08);
       --r:18px;
+      --green:#166534;
+      --green-soft:#dcfce7;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:"Segoe UI",system-ui,Arial;background:var(--bg);color:var(--text);}
@@ -180,8 +209,7 @@ function badgeClass($status) {
     .rightbar{display:flex;align-items:center;gap:12px}
     .bell{
       width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:#fff;
-      display:grid;place-items:center;color:#667085;cursor:pointer;
-      position:relative;
+      display:grid;place-items:center;color:#667085;cursor:pointer;position:relative;
     }
     .dot-red{
       position:absolute; top:8px; right:10px;
@@ -198,7 +226,7 @@ function badgeClass($status) {
       border:1px solid rgba(198,40,40,.18);
     }
 
-    .content{padding:18px;}
+    .content{padding:18px;display:flex;flex-direction:column;gap:18px}
     .card{
       background:var(--card);
       border:1px solid rgba(0,0,0,.08);
@@ -242,20 +270,61 @@ function badgeClass($status) {
 
     .actions{display:flex;gap:8px;flex-wrap:wrap}
     .btn{
-      height:34px; padding:0 10px; border-radius:10px;
+      height:36px; padding:0 12px; border-radius:10px;
       border:1px solid rgba(0,0,0,.10);
       background:#fff; cursor:pointer;
       font-size:11px; font-weight:1000; color:#344054;
       display:inline-flex; align-items:center; gap:7px;
     }
     .btn.red{background:rgba(198,40,40,.10);border-color:rgba(198,40,40,.20);color:var(--red);}
+    .btn.green{background:var(--green-soft);border-color:rgba(22,101,52,.15);color:var(--green);}
     .btn:hover{transform:translateY(-1px); box-shadow:0 10px 20px rgba(0,0,0,.08)}
 
     .empty{padding:16px;color:#98a2b3;font-weight:1000}
 
+    .contact-list{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      padding:16px;
+    }
+
+    .contact-card{
+      border:1px solid rgba(0,0,0,.08);
+      border-radius:16px;
+      padding:16px;
+      background:#fff;
+    }
+
+    .contact-title{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      font-size:14px;
+      font-weight:1000;
+      margin-bottom:10px;
+    }
+
+    .contact-meta{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(180px,1fr));
+      gap:10px 16px;
+      font-size:12px;
+      color:#667085;
+      margin-bottom:14px;
+    }
+
+    .contact-meta div{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
     @media (max-width: 980px){
       .links{gap:10px}
       table{display:block;overflow:auto}
+      .contact-meta{grid-template-columns:1fr}
     }
   </style>
 </head>
@@ -292,6 +361,7 @@ function badgeClass($status) {
     </div>
 
     <div class="content">
+
       <div class="card">
         <div class="head">
           <div>
@@ -365,6 +435,56 @@ function badgeClass($status) {
           </div>
         <?php endif; ?>
       </div>
+
+      <div class="card">
+        <div class="head">
+          <div>
+            <h2>Accepted Donors - Contact Now</h2>
+            <p>When a donor accepts your request, their contact details appear here.</p>
+          </div>
+        </div>
+
+        <?php if (!$acceptedDonors): ?>
+          <div class="empty">No donor has accepted your request yet.</div>
+        <?php else: ?>
+          <div class="contact-list">
+            <?php foreach ($acceptedDonors as $d): ?>
+              <div class="contact-card">
+                <div class="contact-title">
+                  <span><?php echo esc($d['blood_group']); ?> Request</span>
+                  <span class="badge badge-ok">Accepted</span>
+                </div>
+
+                <div class="contact-meta">
+                  <div><i class="fa-solid fa-user"></i> <?php echo esc(trim($d['donor_name']) ?: 'Donor'); ?></div>
+                  <div><i class="fa-solid fa-location-dot"></i> <?php echo esc($d['hospital_location']); ?></div>
+                  <div><i class="fa-regular fa-envelope"></i> <?php echo esc($d['donor_email'] ?: 'Not available'); ?></div>
+                  <div><i class="fa-solid fa-phone"></i> <?php echo esc($d['donor_phone'] ?: 'Not available'); ?></div>
+                </div>
+
+                <div class="actions">
+                  <?php if (!empty($d['donor_phone'])): ?>
+                    <a class="btn green" href="tel:<?php echo esc($d['donor_phone']); ?>">
+                      <i class="fa-solid fa-phone"></i> Call Donor
+                    </a>
+                  <?php endif; ?>
+
+                  <?php if (!empty($d['donor_email'])): ?>
+                    <a class="btn" href="mailto:<?php echo esc($d['donor_email']); ?>">
+                      <i class="fa-regular fa-envelope"></i> Email
+                    </a>
+                  <?php endif; ?>
+
+                  <a class="btn" href="chat.php?request_id=<?php echo (int)$d['request_id']; ?>&user_id=<?php echo (int)$d['donor_id']; ?>">
+                    <i class="fa-regular fa-comment-dots"></i> Message
+                  </a>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
+
     </div>
   </div>
 </body>

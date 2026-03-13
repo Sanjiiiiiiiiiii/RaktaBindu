@@ -5,7 +5,7 @@ ini_set('display_errors', 1);
 
 date_default_timezone_set("Asia/Kathmandu");
 
-// ✅ PUBLIC homepage: login is optional
+// PUBLIC homepage: login is optional
 $isLoggedIn = isset($_SESSION['user_id']);
 $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : 'Guest';
 ?>
@@ -36,81 +36,90 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
       --shadow2:0 10px 24px rgba(0,0,0,.08);
       --radius:16px;
     }
-    *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    body{background:var(--bg);color:var(--text);line-height:1.55}
-    a{color:inherit;text-decoration:none}
-    .wrap{max-width:1120px;margin:0 auto;padding:0 18px}
 
-    header{
-      background:#fff;
-      border-bottom:1px solid rgba(0,0,0,.06);
-      position:sticky;top:0;z-index:1000;
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
     }
-    .topbar{
-      height:56px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:14px;
+
+    body{
+      background:var(--bg);
+      color:var(--text);
+      line-height:1.55;
     }
-    .brand{
-      display:flex;align-items:center;gap:10px;font-weight:800;
-      letter-spacing:.2px;
+
+    a{
+      color:inherit;
+      text-decoration:none;
     }
-    .drop{
-      width:12px;height:18px;background:var(--red);
-      border-radius:10px 10px 14px 14px;
-      position:relative;
+
+    .wrap{
+      max-width:1120px;
+      margin:0 auto;
+      padding:0 18px;
     }
-    .brand span{color:var(--red)}
-    nav ul{list-style:none;display:flex;gap:22px;align-items:center}
-    nav a{
-      font-size:13px;
-      color:#111827;
-      font-weight:600;
-      opacity:.85;
-    }
-    nav a:hover{opacity:1;color:var(--red)}
-    .right-actions{display:flex;align-items:center;gap:12px}
-    .hello{
-      font-size:13px;color:#374151;font-weight:700;
-      display:flex;align-items:center;gap:8px;
-    }
+
     .btn{
-      border:none;cursor:pointer;font-weight:800;
+      border:none;
+      cursor:pointer;
+      font-weight:800;
       border-radius:999px;
       padding:10px 14px;
       font-size:13px;
-      display:inline-flex;align-items:center;gap:8px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
       transition:.2s ease;
       white-space:nowrap;
     }
-    .btn-primary{background:var(--red);color:#fff}
-    .btn-primary:hover{background:var(--red2)}
+
+    .btn-primary{
+      background:var(--red);
+      color:#fff;
+    }
+
+    .btn-primary:hover{
+      background:var(--red2);
+    }
+
     .btn-outline{
-      background:#fff;color:var(--red);
+      background:#fff;
+      color:var(--red);
       border:2px solid rgba(196,22,28,.25);
     }
-    .btn-outline:hover{border-color:rgba(196,22,28,.45)}
+
+    .btn-outline:hover{
+      border-color:rgba(196,22,28,.45);
+    }
 
     .hero{
       padding:40px 0 22px;
       background:#fff;
     }
+
     .hero-grid{
       display:grid;
       grid-template-columns: 1.1fr .9fr;
       gap:22px;
       align-items:center;
     }
+
     .pill{
-      display:inline-flex;align-items:center;gap:10px;
-      font-size:12px;font-weight:800;color:var(--red);
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      font-size:12px;
+      font-weight:800;
+      color:var(--red);
       background:rgba(196,22,28,.06);
       border:1px solid rgba(196,22,28,.10);
-      padding:8px 12px;border-radius:999px;
+      padding:8px 12px;
+      border-radius:999px;
       margin-bottom:14px;
     }
+
     .hero h1{
       font-size:44px;
       line-height:1.08;
@@ -118,15 +127,27 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
       letter-spacing:-.6px;
       margin-bottom:12px;
     }
-    .hero h1 .red{color:var(--red)}
+
+    .hero h1 .red{
+      color:var(--red);
+    }
+
     .hero p{
       color:var(--muted);
       max-width:560px;
       font-size:14px;
       margin-bottom:18px;
     }
-    .hero-actions{display:flex;gap:12px;flex-wrap:wrap}
-    .hero-actions .btn{padding:12px 16px}
+
+    .hero-actions{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    .hero-actions .btn{
+      padding:12px 16px;
+    }
 
     .hero-illus{
       height:210px;
@@ -135,36 +156,57 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
       justify-content:center;
       position:relative;
     }
+
     .heart-float{
       position:absolute;
-      top:10px; left:56%;
+      top:10px;
+      left:56%;
       color:var(--red);
       font-size:14px;
       transform:translateX(-50%);
       opacity:.9;
     }
+
     .medical-card{
-      width:220px;height:160px;
-      display:flex;align-items:center;justify-content:center;
+      width:220px;
+      height:160px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
       background:var(--red);
       border-radius:26px;
       box-shadow:var(--shadow2);
       position:relative;
     }
+
     .medical-cross{
-      width:58px;height:58px;border-radius:14px;
+      width:58px;
+      height:58px;
+      border-radius:14px;
       background:#fff;
-      display:flex;align-items:center;justify-content:center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
     }
-    .medical-cross i{color:var(--red);font-size:30px}
+
+    .medical-cross i{
+      color:var(--red);
+      font-size:30px;
+    }
+
     .family{
       position:absolute;
-      right:-6px; bottom:-10px;
+      right:-6px;
+      bottom:-10px;
       color:var(--red);
       font-size:26px;
       background:#fff;
-      width:62px;height:62px;border-radius:18px;
-      display:flex;align-items:center;justify-content:center;
+      width:62px;
+      height:62px;
+      border-radius:18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
       box-shadow:0 10px 22px rgba(0,0,0,.08);
       border:1px solid rgba(0,0,0,.04);
     }
@@ -174,46 +216,66 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
       color:#fff;
       padding:14px 0;
     }
+
     .urgent-row{
       display:flex;
       justify-content:space-between;
       align-items:center;
       gap:14px;
     }
+
     .urgent h3{
       font-size:14px;
       font-weight:900;
       margin:0;
-      display:flex;align-items:center;gap:10px;
+      display:flex;
+      align-items:center;
+      gap:10px;
     }
+
     .urgent p{
       margin:4px 0 0;
       font-size:12px;
       opacity:.9;
     }
+
     .urgent .btn-outline{
       border-color:rgba(255,255,255,.55);
-      color:#fff;background:transparent;
+      color:#fff;
+      background:transparent;
       padding:10px 14px;
     }
-    .urgent .btn-outline:hover{border-color:rgba(255,255,255,.8)}
 
-    .section{padding:48px 0;}
-    .section .kicker{
-      text-align:center;font-weight:900;color:#111827;
-      font-size:16px;margin-bottom:4px;
+    .urgent .btn-outline:hover{
+      border-color:rgba(255,255,255,.8);
     }
+
+    .section{
+      padding:48px 0;
+    }
+
+    .section .kicker{
+      text-align:center;
+      font-weight:900;
+      color:#111827;
+      font-size:16px;
+      margin-bottom:4px;
+    }
+
     .section .sub{
-      text-align:center;color:var(--muted);
-      font-size:12px;margin-bottom:18px;
+      text-align:center;
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:18px;
     }
 
     .steps{
       display:grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns:repeat(3, 1fr);
       gap:16px;
       margin-top:14px;
     }
+
     .step{
       background:#fff;
       border:1px solid rgba(0,0,0,.06);
@@ -221,105 +283,221 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
       padding:16px 16px 18px;
       box-shadow:0 10px 22px rgba(0,0,0,.06);
     }
-    .step-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-    .icon-dot{
-      width:34px;height:34px;border-radius:999px;
-      background:rgba(196,22,28,.12);
-      display:flex;align-items:center;justify-content:center;
-      color:var(--red);font-size:14px;font-weight:900;
+
+    .step-top{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom:8px;
     }
-    .step h4{font-size:14px;font-weight:900;}
-    .step p{font-size:12px;color:var(--muted);margin-top:6px;}
-    .step .num{color:var(--red);font-weight:900;font-size:12px;}
+
+    .icon-dot{
+      width:34px;
+      height:34px;
+      border-radius:999px;
+      background:rgba(196,22,28,.12);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--red);
+      font-size:14px;
+      font-weight:900;
+    }
+
+    .step h4{
+      font-size:14px;
+      font-weight:900;
+    }
+
+    .step p{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:6px;
+    }
+
+    .step .num{
+      color:var(--red);
+      font-weight:900;
+      font-size:12px;
+    }
 
     .compat-card{
-      background:#fff;border-radius:14px;
+      background:#fff;
+      border-radius:14px;
       border:1px solid rgba(0,0,0,.06);
       box-shadow:0 14px 30px rgba(0,0,0,.08);
-      padding:18px;max-width:820px;margin:18px auto 0;
+      padding:18px;
+      max-width:820px;
+      margin:18px auto 0;
     }
-    table{width:100%;border-collapse:collapse}
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+    }
+
     th{
-      text-align:left;font-size:12px;color:#111827;
-      padding:12px 10px;border-bottom:1px solid rgba(0,0,0,.08);
+      text-align:left;
+      font-size:12px;
+      color:#111827;
+      padding:12px 10px;
+      border-bottom:1px solid rgba(0,0,0,.08);
     }
+
     td{
-      padding:10px 10px;font-size:12px;color:#111827;
-      border-bottom:1px solid rgba(0,0,0,.06);vertical-align:middle;
+      padding:10px 10px;
+      font-size:12px;
+      color:#111827;
+      border-bottom:1px solid rgba(0,0,0,.06);
+      vertical-align:middle;
     }
-    .blood-badge{display:inline-flex;align-items:center;gap:8px;font-weight:900;}
+
+    .blood-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-weight:900;
+    }
+
     .sq{
-      width:18px;height:18px;border-radius:6px;
+      width:18px;
+      height:18px;
+      border-radius:6px;
       background:var(--red);
-      display:inline-flex;align-items:center;justify-content:center;
-      color:#fff;font-size:10px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      font-size:10px;
     }
 
     .why-grid{
       display:grid;
       grid-template-columns:repeat(4, 1fr);
-      gap:14px;margin-top:18px;
+      gap:14px;
+      margin-top:18px;
     }
+
     .why{
-      background:#fff;border:1px solid rgba(0,0,0,.06);
-      border-radius:14px;padding:16px;
+      background:#fff;
+      border:1px solid rgba(0,0,0,.06);
+      border-radius:14px;
+      padding:16px;
       box-shadow:0 10px 22px rgba(0,0,0,.06);
       text-align:center;
     }
+
     .why .why-icon{
-      width:38px;height:38px;border-radius:999px;
+      width:38px;
+      height:38px;
+      border-radius:999px;
       margin:0 auto 10px;
-      display:flex;align-items:center;justify-content:center;
-      font-size:14px;font-weight:900;color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:14px;
+      font-weight:900;
+      color:#fff;
     }
+
     .i-red{background:var(--red)}
     .i-green{background:#16a34a}
-    .why h4{font-size:13px;font-weight:900;margin-bottom:6px}
-    .why p{font-size:12px;color:var(--muted)}
+
+    .why h4{
+      font-size:13px;
+      font-weight:900;
+      margin-bottom:6px;
+    }
+
+    .why p{
+      font-size:12px;
+      color:var(--muted);
+    }
 
     .impact{
-      background:var(--red);color:#fff;
+      background:var(--red);
+      color:#fff;
       padding:44px 0 52px;
     }
-    .impact .kicker{color:#fff}
-    .impact .sub{color:rgba(255,255,255,.85)}
+
+    .impact .kicker{
+      color:#fff;
+    }
+
+    .impact .sub{
+      color:rgba(255,255,255,.85);
+    }
+
     .stats{
       display:grid;
       grid-template-columns:repeat(3, 1fr);
-      gap:14px;margin-top:18px;
+      gap:14px;
+      margin-top:18px;
     }
+
     .stat{
       background:rgba(0,0,0,.08);
       border:1px solid rgba(255,255,255,.18);
-      border-radius:14px;padding:18px;text-align:center;
+      border-radius:14px;
+      padding:18px;
+      text-align:center;
     }
-    .stat .num{font-size:26px;font-weight:950;letter-spacing:.4px;}
-    .stat .lbl{margin-top:6px;font-size:12px;opacity:.9;font-weight:800;}
+
+    .stat .num{
+      font-size:26px;
+      font-weight:950;
+      letter-spacing:.4px;
+    }
+
+    .stat .lbl{
+      margin-top:6px;
+      font-size:12px;
+      opacity:.9;
+      font-weight:800;
+    }
 
     .testimonials{
       display:grid;
       grid-template-columns:repeat(2, 1fr);
-      gap:14px;margin-top:16px;
+      gap:14px;
+      margin-top:16px;
     }
+
     .tcard{
       background:rgba(0,0,0,.08);
       border:1px solid rgba(255,255,255,.18);
-      border-radius:14px;padding:14px;
+      border-radius:14px;
+      padding:14px;
     }
-    .tcard .top{display:flex;gap:10px;align-items:flex-start;}
+
+    .tcard .top{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+    }
+
     .avatar{
-      width:36px;height:36px;border-radius:999px;
+      width:36px;
+      height:36px;
+      border-radius:999px;
       background:rgba(255,255,255,.22);
-      display:flex;align-items:center;justify-content:center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
       font-weight:900;
     }
+
     .tcard p{
-      font-size:12px;color:rgba(255,255,255,.88);
+      font-size:12px;
+      color:rgba(255,255,255,.88);
       margin-top:8px;
     }
+
     .tcard strong{
-      display:block;margin-top:10px;
-      font-size:12px;font-weight:900;
+      display:block;
+      margin-top:10px;
+      font-size:12px;
+      font-weight:900;
     }
 
     .cta{
@@ -327,33 +505,83 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
       padding:46px 0;
       text-align:center;
     }
-    .cta .kicker{font-size:20px}
-    .cta .sub{max-width:680px;margin:0 auto 14px}
-    .cta .cta-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+
+    .cta .kicker{
+      font-size:20px;
+    }
+
+    .cta .sub{
+      max-width:680px;
+      margin:0 auto 14px;
+    }
+
+    .cta .cta-actions{
+      display:flex;
+      gap:12px;
+      justify-content:center;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
 
     footer{
-      background:#0b1220;color:rgba(255,255,255,.85);
+      background:#0b1220;
+      color:rgba(255,255,255,.85);
       padding:44px 0;
     }
+
     .foot{
       display:grid;
       grid-template-columns:1.2fr 1fr 1fr 1fr;
       gap:18px;
     }
-    .foot h5{font-size:13px;font-weight:900;margin-bottom:10px;color:#fff}
-    .foot a{display:block;font-size:12px;opacity:.85;margin:7px 0}
-    .foot a:hover{opacity:1}
-    .foot .mini{font-size:12px;opacity:.85;line-height:1.7}
-    .social{display:flex;gap:10px;margin-top:10px}
-    .social a{
-      width:34px;height:34px;border-radius:10px;
-      background:rgba(255,255,255,.08);
-      display:flex;align-items:center;justify-content:center;
+
+    .foot h5{
+      font-size:13px;
+      font-weight:900;
+      margin-bottom:10px;
+      color:#fff;
     }
+
+    .foot a{
+      display:block;
+      font-size:12px;
+      opacity:.85;
+      margin:7px 0;
+    }
+
+    .foot a:hover{
+      opacity:1;
+    }
+
+    .foot .mini{
+      font-size:12px;
+      opacity:.85;
+      line-height:1.7;
+    }
+
+    .social{
+      display:flex;
+      gap:10px;
+      margin-top:10px;
+    }
+
+    .social a{
+      width:34px;
+      height:34px;
+      border-radius:10px;
+      background:rgba(255,255,255,.08);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
     .copy{
-      margin-top:18px;padding-top:16px;
+      margin-top:18px;
+      padding-top:16px;
       border-top:1px solid rgba(255,255,255,.10);
-      text-align:center;font-size:12px;opacity:.8;
+      text-align:center;
+      font-size:12px;
+      opacity:.8;
     }
 
     @media (max-width: 980px){
@@ -364,11 +592,9 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
       .stats{grid-template-columns:1fr}
       .testimonials{grid-template-columns:1fr}
       .foot{grid-template-columns:1fr 1fr}
-      nav ul{gap:14px}
     }
+
     @media (max-width: 560px){
-      .topbar{height:auto;padding:12px 0;flex-wrap:wrap}
-      nav ul{flex-wrap:wrap}
       .hero h1{font-size:34px}
       .medical-card{width:200px}
       .foot{grid-template-columns:1fr}
@@ -378,48 +604,7 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
 
 <body>
 
-<header>
-  <div class="wrap">
-    <div class="topbar">
-      <div class="brand">
-        <div class="drop"></div>
-        Rakta.<span>Bindu</span>
-      </div>
-
-   <nav>
-  <ul>
-    <li><a href="index.php">Home</a></li>
-    <li><a href="#how">How It Works</a></li>
-    <li><a href="donor-form.php">Donate</a></li>
-
-    <?php if ($isLoggedIn): ?>
-      <li><a href="donation_history.php">Donation History</a></li>
-    <?php endif; ?>
-
-    <li><a href="#contact">Contact</a></li>
-    <li><a href="#about">About</a></li>
-  </ul>
-</nav>
-
-
-      <div class="right-actions">
-        <?php if ($isLoggedIn): ?>
-          <a href="profile.php" class="hello" title="My Profile">
-  <i class="fa-regular fa-user"></i> <?= $userName ?>
-</a>
-<a class="btn btn-outline" href="donation_history.php">
-  <i class="fa-solid fa-clock-rotate-left"></i> History
-</a>
-
-          <a class="btn btn-primary" href="logout.php"><i class="fa-solid fa-right-from-bracket"></i> Log out</a>
-        <?php else: ?>
-          <a class="btn btn-outline" href="login.php"><i class="fa-solid fa-right-to-bracket"></i> Login</a>
-          <a class="btn btn-primary" href="signup.php"><i class="fa-solid fa-user-plus"></i> Sign up</a>
-        <?php endif; ?>
-      </div>
-    </div>
-  </div>
-</header>
+<?php include "navbar.php"; ?>
 
 <section class="hero">
   <div class="wrap">
