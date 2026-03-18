@@ -1,6 +1,7 @@
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
 require_once __DIR__ . "/db.php";
 date_default_timezone_set("Asia/Kathmandu");
 
@@ -30,71 +31,108 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $error = "Passwords do not match.";
     } else {
 
-        // check if email exists
-        $check = $conn->prepare("SELECT id FROM users WHERE TRIM(LOWER(email)) = ? LIMIT 1");
-        $check->bind_param("s", $email);
+        // check existing email
+        $check = $conn->prepare("SELECT id FROM users WHERE LOWER(email)=? LIMIT 1");
+        $check->bind_param("s",$email);
         $check->execute();
         $res = $check->get_result();
 
         if ($res && $res->num_rows > 0) {
+
             $error = "Email already registered.";
+
         } else {
 
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-            $otp = (string)rand(100000, 999999);
+            // generate OTP
+            $otp = random_int(100000,999999);
 
-            // IMPORTANT: use DB time for expiry (no timezone mismatch)
             $stmt = $conn->prepare("
-              INSERT INTO users
-              (firstName, lastName, email, phone, bloodType, age, location, availability, password, verification_code, verification_expires, is_verified)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE), 0)
+                INSERT INTO users
+                (firstName,lastName,email,phone,bloodType,age,location,availability,password,verification_code,verification_expires,is_verified)
+                VALUES (?,?,?,?,?,?,?,?,?,?,DATE_ADD(NOW(),INTERVAL 10 MINUTE),0)
             ");
+
             $stmt->bind_param(
                 "sssssissss",
-                $firstName, $lastName, $email, $phone, $bloodType,
-                $age, $location, $availability, $hashedPassword, $otp
+                $firstName,$lastName,$email,$phone,$bloodType,
+                $age,$location,$availability,$hashedPassword,$otp
             );
 
             if ($stmt->execute()) {
 
                 $mail = new PHPMailer(true);
+
                 try {
-                    // DEBUG (temporary) – shows real error if mail fails
-                    // $mail->SMTPDebug = 2;
-                    // $mail->Debugoutput = 'html';
+
+                    $mail->CharSet = 'UTF-8';
 
                     $mail->isSMTP();
                     $mail->Host = 'smtp.gmail.com';
                     $mail->SMTPAuth = true;
                     $mail->Username = 'sanjiwanikarki@gmail.com';
-                    $mail->Password = 'qcymjgvfcoyyeyir'; // ✅ no spaces
+                    $mail->Password = 'gomaomapzrtuimbl';
                     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                     $mail->Port = 587;
 
-                    $mail->setFrom('sanjiwanikarki@gmail.com', 'RaktaBindu');
+                    $mail->setFrom('sanjiwanikarki@gmail.com','RaktaBindu Verification');
+                    $mail->addReplyTo('sanjiwanikarki@gmail.com','RaktaBindu Support');
+
                     $mail->addAddress($email);
 
                     $mail->isHTML(true);
+
                     $mail->Subject = "Verify your RaktaBindu account";
+
                     $mail->Body = "
-                      <h2 style='color:#c62828'>Email Verification</h2>
-                      <p>Your OTP is:</p>
-                      <h1 style='letter-spacing:6px'>$otp</h1>
-                      <p>Valid for 10 minutes.</p>
+                    <div style='font-family:Segoe UI,Arial,sans-serif'>
+                        <h2 style='color:#c62828'>RaktaBindu Email Verification</h2>
+
+                        <p>Hello <strong>$firstName</strong>,</p>
+
+                        <p>Your verification code is:</p>
+
+                        <h1 style='letter-spacing:6px;color:#c62828'>$otp</h1>
+
+                        <p>This code is valid for <strong>10 minutes</strong>.</p>
+
+                        <p>If you did not create this account, ignore this email.</p>
+                    </div>
                     ";
+
+                    $mail->AltBody = "Your RaktaBindu verification code is: $otp";
 
                     $mail->send();
 
                     header("Location: verify-email.php?email=" . urlencode($email));
                     exit();
 
-                } catch (Exception $e) {
-                    $error = "Account created, but mail failed: " . $mail->ErrorInfo;
+                }
+                catch (Exception $e) {
+
+                    // delete unverified account if mail fails
+                    $del = $conn->prepare("
+                        DELETE FROM users
+                        WHERE LOWER(email)=?
+                        AND is_verified=0
+                        LIMIT 1
+                    ");
+
+                    if($del){
+                        $del->bind_param("s",$email);
+                        $del->execute();
+                    }
+
+                    $error = "Verification email could not be sent. Please try again.";
+
                 }
 
-            } else {
+            }
+            else {
+
                 $error = "Signup failed: " . $stmt->error;
+
             }
         }
     }

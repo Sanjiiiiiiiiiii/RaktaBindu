@@ -7,21 +7,33 @@ require_once __DIR__ . "/db.php";
 date_default_timezone_set("Asia/Kathmandu");
 
 $error = "";
+$selectedRole = $_POST['role'] ?? 'user';
+$enteredEmail = trim($_POST['email'] ?? '');
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
+    $role = trim(strtolower($_POST['role'] ?? 'user'));
     $email = trim(strtolower($_POST['email'] ?? ''));
     $password = $_POST['password'] ?? '';
 
-    if ($email === "" || $password === "") {
+    if (!in_array($role, ['user', 'admin'], true)) {
+        $error = "Please select a valid login type.";
+    } elseif ($email === "" || $password === "") {
         $error = "Please enter email and password.";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "Please enter a valid email address.";
     } else {
 
-        // ✅ fetch is_verified too
-        $stmt = $conn->prepare("SELECT id, firstName, password, is_verified FROM users WHERE TRIM(LOWER(email)) = ? LIMIT 1");
-        if (!$stmt) die("Prepare failed: " . $conn->error);
+        // fetch role and verification too
+        $stmt = $conn->prepare("
+            SELECT id, firstName, email, password, is_verified, role
+            FROM users
+            WHERE TRIM(LOWER(email)) = ?
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            die("Prepare failed: " . $conn->error);
+        }
 
         $stmt->bind_param("s", $email);
         $stmt->execute();
@@ -32,27 +44,44 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             if (password_verify($password, $user['password'])) {
 
-                // ✅ BLOCK if email not verified
-                if ((int)$user['is_verified'] !== 1) {
-                    header("Location: verify-email.php?email=" . urlencode($email));
-                    exit();
-                }
+                $dbRole = strtolower(trim($user['role'] ?? 'user'));
 
-                // ✅ login success
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['user_name'] = $user['firstName'];
-                header("Location: index.php");
-                exit();
+                // block wrong login type
+                if ($dbRole !== $role) {
+                    $error = "This account does not match the selected login type.";
+                } else {
+
+                    // user verification only for normal users
+                    if ($dbRole === 'user' && (int)$user['is_verified'] !== 1) {
+                        header("Location: verify-email.php?email=" . urlencode($email));
+                        exit();
+                    }
+
+                    // login success
+                    $_SESSION['user_id'] = (int)$user['id'];
+                    $_SESSION['user_name'] = $user['firstName'] ?? 'User';
+                    $_SESSION['user_email'] = $user['email'] ?? '';
+                    $_SESSION['user_role'] = $dbRole;
+
+                    if ($dbRole === 'admin') {
+                        header("Location: admin.php");
+                        exit();
+                    } else {
+                        header("Location: index.php");
+                        exit();
+                    }
+                }
+            } else {
+                $error = "Invalid email or password!";
             }
+        } else {
+            $error = "Invalid email or password!";
         }
 
-        $error = "Invalid email or password!";
+        $stmt->close();
     }
 }
 ?>
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -60,7 +89,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Login | RaktaBindu</title>
 
-<!-- Font Awesome Icons -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
 <style>
@@ -68,6 +96,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     --red: #c62828;
     --light-red: #ffebee;
     --dark-red: #b71c1c;
+    --text: #1f2430;
+    --muted: #667085;
+    --line: rgba(0,0,0,.08);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -79,9 +110,9 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    color: var(--text);
 }
 
-/* ===== MAIN CONTAINER ===== */
 .login-container {
     display: flex;
     width: 90%;
@@ -92,7 +123,6 @@ body {
     box-shadow: 0 20px 60px rgba(0,0,0,0.18);
 }
 
-/* ===== LEFT PANEL ===== */
 .left-panel {
     background: var(--red);
     color: white;
@@ -194,7 +224,6 @@ body {
     opacity: 0.9;
 }
 
-/* ===== RIGHT PANEL ===== */
 .right-panel {
     width: 55%;
     padding: 70px 60px;
@@ -207,7 +236,7 @@ body {
 
 .login-box {
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
 }
 
 .login-box h2 {
@@ -219,12 +248,47 @@ body {
 .form-subtitle {
     text-align: center;
     color: #888;
-    margin-bottom: 35px;
+    margin-bottom: 28px;
     font-size: 16px;
 }
 
-/* ===== FORM ===== */
-.input-group { margin-bottom: 24px; }
+.role-select {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 28px;
+}
+
+.role-option {
+    position: relative;
+}
+
+.role-option input {
+    display: none;
+}
+
+.role-card {
+    border: 1px solid #e4e7ec;
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: .25s ease;
+    background: #fff;
+}
+
+.role-option input:checked + .role-card {
+    border-color: var(--red);
+    background: var(--light-red);
+    color: var(--red);
+    box-shadow: 0 8px 20px rgba(198,40,40,0.10);
+}
+
+.input-group { margin-bottom: 22px; }
 
 .input-group label {
     display: block;
@@ -234,21 +298,17 @@ body {
     font-size: 15px;
 }
 
-/* INPUT + ICON ALIGNMENT */
 .input-wrapper { position: relative; }
 
-.input-wrapper i {
+.input-wrapper i.left-icon {
     position: absolute;
     top: 50%;
+    left: 16px;
     transform: translateY(-50%);
     font-size: 16px;
     color: #888;
 }
 
-.input-wrapper .fa-envelope,
-.input-wrapper .fa-lock { left: 16px; }
-
-.input-wrapper { position: relative; }
 .eye-icon{
   position:absolute;
   right:16px;
@@ -259,7 +319,6 @@ body {
   font-size:16px;
 }
 
-
 .input-wrapper input {
     width: 100%;
     padding: 16px 48px;
@@ -267,18 +326,31 @@ body {
     border-radius: 12px;
     font-size: 16px;
     outline: none;
-    transition: border 0.3s;
+    transition: border 0.3s, box-shadow 0.3s;
 }
 
-.input-wrapper input:focus { border-color: var(--red); }
+.input-wrapper input:focus {
+    border-color: var(--red);
+    box-shadow: 0 0 0 4px rgba(198,40,40,0.08);
+}
 
-/* OPTIONS */
+.error-box {
+    color:#c62828;
+    background:#ffebee;
+    border:1px solid #ffcdd2;
+    border-radius:12px;
+    padding:12px 14px;
+    font-size:14px;
+    margin-bottom:18px;
+}
+
 .options {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin: 20px 0 30px;
     font-size: 14px;
+    gap: 12px;
 }
 
 .checkbox {
@@ -308,11 +380,11 @@ body {
     color: var(--red);
     text-decoration: none;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .forgot i { margin-right: 6px; }
 
-/* BUTTON */
 .signin-btn {
     width: 100%;
     padding: 16px;
@@ -324,12 +396,14 @@ body {
     font-weight: bold;
     cursor: pointer;
     margin-bottom: 30px;
-    transition: background 0.3s;
+    transition: background 0.3s, transform 0.2s;
 }
 
-.signin-btn:hover { background: var(--dark-red); }
+.signin-btn:hover {
+    background: var(--dark-red);
+    transform: translateY(-1px);
+}
 
-/* DIVIDER */
 .divider {
     text-align: center;
     margin: 30px 0;
@@ -355,7 +429,6 @@ body {
     z-index: 1;
 }
 
-/* SOCIAL */
 .social-login {
     display: flex;
     gap: 15px;
@@ -383,7 +456,6 @@ body {
     box-shadow: 0 4px 12px rgba(198,40,40,0.1);
 }
 
-/* SIGNUP LINK */
 .signup-link {
     text-align: center;
     color: #888;
@@ -396,12 +468,30 @@ body {
     font-weight: 600;
 }
 
-/* RESPONSIVE */
 @media (max-width: 992px) {
-    .login-container { flex-direction: column; border-radius: 24px; }
+    .login-container {
+        flex-direction: column;
+        border-radius: 24px;
+    }
     .left-panel, .right-panel { width: 100%; }
-    .left-panel { padding: 50px; border-radius: 24px 24px 0 0; }
-    .right-panel { padding: 50px; border-radius: 0 0 24px 24px; }
+    .left-panel {
+        padding: 50px;
+        border-radius: 24px 24px 0 0;
+    }
+    .right-panel {
+        padding: 50px 30px;
+        border-radius: 0 0 24px 24px;
+    }
+}
+
+@media (max-width: 560px) {
+    .role-select {
+        grid-template-columns: 1fr;
+    }
+    .options {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
 </style>
 </head>
@@ -410,7 +500,6 @@ body {
 
 <div class="login-container">
 
-    <!-- LEFT PANEL -->
     <div class="left-panel">
         <div class="logo">
             <div class="drop"><i class="fa-solid fa-droplet"></i></div>
@@ -447,38 +536,59 @@ body {
         </ul>
     </div>
 
-    <!-- RIGHT PANEL -->
     <div class="right-panel">
         <div class="login-box">
 
             <h2>Login</h2>
-            <p class="form-subtitle">Enter your credentials to access your account</p>
+            <p class="form-subtitle">Choose login type and enter your credentials</p>
 
             <form action="login.php" method="POST" autocomplete="off" novalidate>
+
+                <div class="role-select">
+                    <label class="role-option">
+                        <input type="radio" name="role" value="user" <?php echo ($selectedRole === 'user') ? 'checked' : ''; ?>>
+                        <span class="role-card">
+                            <i class="fa-regular fa-user"></i> User Login
+                        </span>
+                    </label>
+
+                    <label class="role-option">
+                        <input type="radio" name="role" value="admin" <?php echo ($selectedRole === 'admin') ? 'checked' : ''; ?>>
+                        <span class="role-card">
+                            <i class="fa-solid fa-shield-halved"></i> Admin Login
+                        </span>
+                    </label>
+                </div>
+
+                <?php if (!empty($error)): ?>
+                    <div class="error-box">
+                        <?php echo htmlspecialchars($error); ?>
+                    </div>
+                <?php endif; ?>
 
                 <div class="input-group">
                     <label>Email</label>
                     <div class="input-wrapper">
-                        <i class="fa-solid fa-envelope"></i>
-                        <input type="email" name="email" placeholder="Enter your email" required>
+                        <i class="fa-solid fa-envelope left-icon"></i>
+                        <input
+                            type="email"
+                            name="email"
+                            placeholder="Enter your email"
+                            value="<?php echo htmlspecialchars($enteredEmail); ?>"
+                            required
+                        >
                     </div>
                 </div>
 
                 <div class="input-group">
+                    
                     <label>Password</label>
                     <div class="input-wrapper">
-  <i class="fa-solid fa-lock"></i>
-  <input id="password" type="password" name="password" placeholder="Enter your password" required>
-  <i id="togglePassword" class="fa-regular fa-eye-slash eye-icon" title="Show/Hide"></i>
-
-</div>
-
-
-                <?php if (!empty($error)): ?>
-                    <p style="color:#c62828;font-size:14px;margin-top:8px;">
-                        <?php echo htmlspecialchars($error); ?>
-                    </p>
-                <?php endif; ?>
+                        <i class="fa-solid fa-lock left-icon"></i>
+                        <input id="password" type="password" name="password" placeholder="Enter your password" required>
+                        <i id="togglePassword" class="fa-regular fa-eye-slash eye-icon" title="Show/Hide"></i>
+                    </div>
+                </div>
 
                 <div class="options">
                     <label class="checkbox">
@@ -515,18 +625,17 @@ body {
         </div>
     </div>
 </div>
+
 <script>
-  const pw = document.getElementById("password");
-  const toggle = document.getElementById("togglePassword");
+const pw = document.getElementById("password");
+const toggle = document.getElementById("togglePassword");
 
-  toggle.addEventListener("click", () => {
-    const isHidden = pw.type === "password";
-    pw.type = isHidden ? "text" : "password";
-
-    // swap icon
-    toggle.classList.toggle("fa-eye");
-    toggle.classList.toggle("fa-eye-slash");
-  });
+toggle.addEventListener("click", () => {
+  const isHidden = pw.type === "password";
+  pw.type = isHidden ? "text" : "password";
+  toggle.classList.toggle("fa-eye");
+  toggle.classList.toggle("fa-eye-slash");
+});
 </script>
 
 </body>
