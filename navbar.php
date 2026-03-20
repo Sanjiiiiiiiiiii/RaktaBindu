@@ -1,292 +1,515 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
-  session_start();
+    session_start();
 }
 
 require_once __DIR__ . "/db.php";
 
 $isLoggedIn   = isset($_SESSION['user_id']);
-$userName     = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : 'Guest';
-$currentPage  = basename($_SERVER['PHP_SELF'] ?? '');
-$unreadCount  = 0;
+$userId       = (int)($_SESSION['user_id'] ?? 0);
+$userNameRaw  = trim((string)($_SESSION['user_name'] ?? 'User'));
+$userName     = htmlspecialchars($userNameRaw, ENT_QUOTES, 'UTF-8');
+$avatarLetter = strtoupper(substr($userNameRaw !== '' ? $userNameRaw : 'U', 0, 1));
+$currentPage  = basename($_SERVER['PHP_SELF']);
 
-if ($isLoggedIn && isset($conn)) {
-  $uid = (int)($_SESSION['user_id'] ?? 0);
+function navActive(array $pages, string $currentPage): string {
+    return in_array($currentPage, $pages, true) ? 'active' : '';
+}
 
-  $nq = $conn->prepare("
-    SELECT COUNT(*) AS unread_count
-    FROM notifications
-    WHERE user_id = ? AND is_read = 0
-  ");
-  if ($nq) {
-    $nq->bind_param("i", $uid);
-    $nq->execute();
-    $nr = $nq->get_result()->fetch_assoc();
-    $unreadCount = (int)($nr['unread_count'] ?? 0);
-    $nq->close();
-  }
+$unreadCount = 0;
+
+if ($isLoggedIn && isset($conn) && $conn instanceof mysqli) {
+    $notifStmt = $conn->prepare("
+        SELECT COUNT(*) AS unread_count
+        FROM notifications
+        WHERE user_id = ? AND is_read = 0
+    ");
+
+    if ($notifStmt) {
+        $notifStmt->bind_param("i", $userId);
+        $notifStmt->execute();
+        $notifRes = $notifStmt->get_result()->fetch_assoc();
+        $unreadCount = (int)($notifRes['unread_count'] ?? 0);
+        $notifStmt->close();
+    }
 }
 ?>
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
 <style>
-  .rb-navbar{
-    background:#fff;
-    border-bottom:1px solid rgba(0,0,0,.06);
-    position:sticky;
-    top:0;
-    z-index:1000;
-  }
-
-  .rb-wrap{
-    max-width:1120px;
-    margin:0 auto;
-    padding:0 18px;
-  }
-
-  .rb-topbar{
-    min-height:56px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:14px;
-    padding:10px 0;
-  }
-
-  .rb-brand{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    font-weight:800;
-    letter-spacing:.2px;
-    text-decoration:none;
-    color:#1f2937;
-    white-space:nowrap;
-  }
-
-  .rb-drop{
-    width:12px;
-    height:18px;
-    background:#c4161c;
-    border-radius:10px 10px 14px 14px;
-    position:relative;
-    flex:0 0 auto;
-  }
-
-  .rb-brand span{
-    color:#c4161c;
-  }
-
-  .rb-nav ul{
-    list-style:none;
-    display:flex;
-    gap:22px;
-    align-items:center;
-    margin:0;
-    padding:0;
-    flex-wrap:wrap;
-  }
-
-  .rb-nav a{
-    font-size:13px;
-    color:#111827;
-    font-weight:600;
-    opacity:.85;
-    text-decoration:none;
-    transition:.2s ease;
-  }
-
-  .rb-nav a:hover,
-  .rb-nav a.rb-active{
-    opacity:1;
-    color:#c4161c;
-  }
-
-  .rb-right-actions{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    flex-wrap:wrap;
-  }
-
-  .rb-hello{
-    font-size:13px;
-    color:#374151;
-    font-weight:700;
-    display:flex;
-    align-items:center;
-    gap:8px;
-    text-decoration:none;
-  }
-
-  .rb-noti{
-    position:relative;
-    width:40px;
-    height:40px;
-    border-radius:999px;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    text-decoration:none;
-    color:#374151;
-    background:#fff;
-    border:2px solid rgba(196,22,28,.14);
-    transition:.2s ease;
-  }
-
-  .rb-noti:hover{
-    color:#c4161c;
-    border-color:rgba(196,22,28,.30);
-    background:#fff7f7;
-  }
-
-  .rb-noti-badge{
-    position:absolute;
-    top:-4px;
-    right:-2px;
-    min-width:19px;
-    height:19px;
-    padding:0 5px;
-    border-radius:999px;
-    background:#c4161c;
-    color:#fff;
-    font-size:10px;
-    font-weight:800;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    line-height:1;
-    border:2px solid #fff;
-  }
-
-  .rb-btn{
-    border:none;
-    cursor:pointer;
-    font-weight:800;
-    border-radius:999px;
-    padding:10px 14px;
-    font-size:13px;
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    transition:.2s ease;
-    white-space:nowrap;
-    text-decoration:none;
-  }
-
-  .rb-btn-primary{
-    background:#c4161c;
-    color:#fff;
-  }
-
-  .rb-btn-primary:hover{
-    background:#b31218;
-  }
-
-  .rb-btn-outline{
-    background:#fff;
-    color:#c4161c;
-    border:2px solid rgba(196,22,28,.25);
-  }
-
-  .rb-btn-outline:hover{
-    border-color:rgba(196,22,28,.45);
-  }
-
-  @media (max-width: 980px){
-    .rb-topbar{
-      flex-wrap:wrap;
-      justify-content:center;
+    .site-navbar-wrap{
+        width:min(1180px,92%);
+        margin:22px auto 14px;
     }
 
-    .rb-nav ul{
-      gap:14px;
-      justify-content:center;
+    .site-navbar{
+        background:#fff;
+        border:1px solid rgba(0,0,0,.08);
+        border-radius:18px;
+        box-shadow:0 12px 40px rgba(0,0,0,.06);
+        padding:14px 18px;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:14px;
+        position:relative;
+        flex-wrap:wrap;
     }
 
-    .rb-right-actions{
-      justify-content:center;
+    .site-brand{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        text-decoration:none;
+        color:#1f2430;
+        font-weight:1000;
+        flex-shrink:0;
     }
-  }
 
-  @media (max-width: 560px){
-    .rb-topbar{
-      padding:12px 0;
+    .site-brand-logo{
+        width:38px;
+        height:38px;
+        border-radius:12px;
+        background:rgba(198,40,40,.10);
+        color:#c62828;
+        display:grid;
+        place-items:center;
+        border:1px solid rgba(198,40,40,.18);
+        font-size:16px;
     }
 
-    .rb-nav ul{
-      flex-wrap:wrap;
-      justify-content:center;
+    .site-brand-text{
+        line-height:1.08;
     }
-  }
+
+    .site-brand-text b{
+        color:#c62828;
+    }
+
+    .site-brand-text small{
+        display:block;
+        color:#98a2b3;
+        font-size:11px;
+        font-weight:800;
+        margin-top:3px;
+    }
+
+    .site-nav-center{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        flex-wrap:wrap;
+        flex:1;
+        justify-content:center;
+    }
+
+    .site-nav-link{
+        text-decoration:none;
+        color:#667085;
+        font-size:13px;
+        font-weight:900;
+        padding:10px 14px;
+        border-radius:12px;
+        display:inline-flex;
+        align-items:center;
+        gap:8px;
+        transition:.2s ease;
+        white-space:nowrap;
+    }
+
+    .site-nav-link:hover{
+        background:rgba(198,40,40,.08);
+        color:#c62828;
+    }
+
+    .site-nav-link.active{
+        background:rgba(198,40,40,.08);
+        color:#c62828;
+    }
+
+    .site-nav-right{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        flex-shrink:0;
+    }
+
+    .site-icon-btn{
+        position:relative;
+        width:40px;
+        height:40px;
+        border-radius:12px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#fff;
+        color:#667085;
+        display:grid;
+        place-items:center;
+        text-decoration:none;
+        transition:.2s ease;
+    }
+
+    .site-icon-btn:hover{
+        background:rgba(198,40,40,.08);
+        color:#c62828;
+    }
+
+    .site-badge-dot{
+        position:absolute;
+        top:7px;
+        right:7px;
+        min-width:18px;
+        height:18px;
+        padding:0 5px;
+        border-radius:999px;
+        background:#c62828;
+        color:#fff;
+        font-size:10px;
+        font-weight:1000;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border:2px solid #fff;
+        line-height:1;
+    }
+
+    .site-user-menu{
+        position:relative;
+    }
+
+    .site-user-btn{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#fff;
+        border-radius:14px;
+        padding:6px 10px 6px 6px;
+        cursor:pointer;
+        transition:.2s ease;
+    }
+
+    .site-user-btn:hover{
+        background:rgba(198,40,40,.04);
+    }
+
+    .site-avatar{
+        width:36px;
+        height:36px;
+        border-radius:50%;
+        background:rgba(198,40,40,.10);
+        color:#c62828;
+        display:grid;
+        place-items:center;
+        font-weight:1000;
+        border:1px solid rgba(198,40,40,.18);
+        font-size:14px;
+    }
+
+    .site-user-meta{
+        display:flex;
+        flex-direction:column;
+        align-items:flex-start;
+        line-height:1.1;
+    }
+
+    .site-user-name{
+        font-size:12px;
+        font-weight:900;
+        color:#1f2430;
+        max-width:120px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+    }
+
+    .site-user-role{
+        font-size:11px;
+        color:#98a2b3;
+        font-weight:800;
+        margin-top:2px;
+    }
+
+    .site-dropdown{
+        position:absolute;
+        top:calc(100% + 10px);
+        right:0;
+        width:230px;
+        background:#fff;
+        border:1px solid rgba(0,0,0,.08);
+        border-radius:16px;
+        box-shadow:0 20px 40px rgba(0,0,0,.10);
+        padding:8px;
+        display:none;
+        z-index:2000;
+    }
+
+    .site-dropdown.show{
+        display:block;
+    }
+
+    .site-dropdown a{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:11px 12px;
+        border-radius:12px;
+        text-decoration:none;
+        color:#344054;
+        font-size:13px;
+        font-weight:800;
+    }
+
+    .site-dropdown a:hover{
+        background:rgba(198,40,40,.08);
+        color:#c62828;
+    }
+
+    .site-mobile-toggle{
+        display:none;
+        width:42px;
+        height:42px;
+        border-radius:12px;
+        border:1px solid rgba(0,0,0,.08);
+        background:#fff;
+        color:#667085;
+        cursor:pointer;
+    }
+
+    .site-mobile-panel{
+        display:none;
+        width:100%;
+        margin-top:12px;
+        border-top:1px solid rgba(0,0,0,.06);
+        padding-top:12px;
+    }
+
+    .site-mobile-panel.show{
+        display:block;
+    }
+
+    .site-mobile-links{
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+    }
+
+    .site-mobile-links a,
+    .site-mobile-user a{
+        text-decoration:none;
+        color:#667085;
+        font-size:13px;
+        font-weight:900;
+        padding:12px 14px;
+        border-radius:12px;
+        display:flex;
+        align-items:center;
+        gap:8px;
+    }
+
+    .site-mobile-links a:hover,
+    .site-mobile-links a.active,
+    .site-mobile-user a:hover{
+        background:rgba(198,40,40,.08);
+        color:#c62828;
+    }
+
+    .site-mobile-user{
+        margin-top:12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+        padding-top:12px;
+        border-top:1px solid rgba(0,0,0,.06);
+    }
+
+    @media (max-width: 1080px){
+        .site-nav-center{
+            gap:6px;
+        }
+
+        .site-nav-link{
+            padding:9px 11px;
+            font-size:12px;
+        }
+    }
+
+    @media (max-width: 980px){
+        .site-nav-center,
+        .site-nav-right{
+            display:none;
+        }
+
+        .site-mobile-toggle{
+            display:block;
+        }
+
+        .site-navbar{
+            justify-content:space-between;
+        }
+    }
 </style>
 
-<header class="rb-navbar">
-  <div class="rb-wrap">
-    <div class="rb-topbar">
+<div class="site-navbar-wrap">
+    <nav class="site-navbar">
+        <a href="index.php" class="site-brand">
+            <div class="site-brand-logo"><i class="fa-solid fa-droplet"></i></div>
+            <div class="site-brand-text">
+                Rakta.<b>Bindu</b>
+                <small>Save Lives Together</small>
+            </div>
+        </a>
 
-      <a href="index.php" class="rb-brand">
-        <div class="rb-drop"></div>
-        Rakta.<span>Bindu</span>
-      </a>
+        <div class="site-nav-center">
+            <a class="site-nav-link <?php echo navActive(['index.php'], $currentPage); ?>" href="index.php">
+                <i class="fa-solid fa-house"></i> Home
+            </a>
 
-      <nav class="rb-nav">
-        <ul>
-          <li>
-            <a href="index.php" class="<?php echo ($currentPage === 'index.php') ? 'rb-active' : ''; ?>">Home</a>
-          </li>
-          <li>
-            <a href="index.php#how">How It Works</a>
-          </li>
-          <li>
-            <a href="donor-form.php" class="<?php echo ($currentPage === 'donor-form.php') ? 'rb-active' : ''; ?>">Donate</a>
-          </li>
+            <a class="site-nav-link <?php echo navActive(['donor-form.php'], $currentPage); ?>" href="donor-form.php">
+                <i class="fa-solid fa-hand-holding-droplet"></i> Donate
+            </a>
 
-          <?php if ($isLoggedIn): ?>
-            <li>
-              <a href="donation_history.php" class="<?php echo ($currentPage === 'donation_history.php') ? 'rb-active' : ''; ?>">Donation History</a>
-            </li>
-          <?php endif; ?>
+            <a class="site-nav-link <?php echo navActive(['request-blood.php'], $currentPage); ?>" href="request-blood.php">
+                <i class="fa-solid fa-droplet"></i> Request Blood
+            </a>
 
-          <li>
-            <a href="index.php#contact">Contact</a>
-          </li>
-          <li>
-            <a href="index.php#about">About</a>
-          </li>
-        </ul>
-      </nav>
+           
+            <a class="site-nav-link <?php echo navActive(['donation_history.php'], $currentPage); ?>" href="donation_history.php">
+                <i class="fa-solid fa-clock-rotate-left"></i> History
+            </a>
 
-      <div class="rb-right-actions">
-        <?php if ($isLoggedIn): ?>
-          <a href="notifications.php" class="rb-noti" title="Notifications">
-            <i class="fa-regular fa-bell"></i>
-            <?php if ($unreadCount > 0): ?>
-              <span class="rb-noti-badge">
-                <?php echo $unreadCount > 99 ? '99+' : $unreadCount; ?>
-              </span>
+            
+            <a class="site-nav-link <?php echo navActive(['about.php'], $currentPage); ?>" href="about.php">
+                <i class="fa-solid fa-circle-info"></i> About
+            </a>
+
+            <a class="site-nav-link <?php echo navActive(['contact.php'], $currentPage); ?>" href="contact.php">
+                <i class="fa-solid fa-envelope"></i> Contact
+            </a>
+
+            <a class="site-nav-link <?php echo navActive(['faq-chatbot.php'], $currentPage); ?>" href="faq-chatbot.php">
+                <i class="fa-solid fa-robot"></i> FAQ
+            </a>
+        </div>
+
+        <div class="site-nav-right">
+            <?php if ($isLoggedIn): ?>
+                <a class="site-icon-btn" href="notifications.php" title="Notifications">
+                    <i class="fa-regular fa-bell"></i>
+                    <?php if ($unreadCount > 0): ?>
+                        <span class="site-badge-dot"><?php echo $unreadCount > 99 ? '99+' : $unreadCount; ?></span>
+                    <?php endif; ?>
+                </a>
+
+                <div class="site-user-menu">
+                    <button type="button" class="site-user-btn" id="siteUserBtn">
+                        <div class="site-avatar"><?php echo htmlspecialchars($avatarLetter, ENT_QUOTES, 'UTF-8'); ?></div>
+                        <div class="site-user-meta">
+                            <span class="site-user-name"><?php echo $userName; ?></span>
+                            <span class="site-user-role">Logged In</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-down" style="font-size:11px;color:#98a2b3;"></i>
+                    </button>
+
+                    <div class="site-dropdown" id="siteDropdown">
+                        <a href="profile.php"><i class="fa-regular fa-user"></i> Profile</a>
+                        <a href="my-requests.php"><i class="fa-regular fa-file-lines"></i> My Requests</a>
+                        <a href="donation_history.php"><i class="fa-regular fa-clock"></i> Donation History</a>
+                        <a href="notifications.php"><i class="fa-regular fa-bell"></i> Notifications</a>
+                        <a href="about.php"><i class="fa-solid fa-circle-info"></i> About</a>
+                        <a href="contact.php"><i class="fa-solid fa-envelope"></i> Contact</a>
+                        <a href="logout.php"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+                    </div>
+                </div>
+            <?php else: ?>
+                <a class="site-nav-link <?php echo navActive(['login.php'], $currentPage); ?>" href="login.php">
+                    <i class="fa-solid fa-right-to-bracket"></i> Login
+                </a>
+
+                <a class="site-nav-link <?php echo navActive(['signup.php'], $currentPage); ?>" href="signup.php">
+                    <i class="fa-solid fa-user-plus"></i> Sign Up
+                </a>
             <?php endif; ?>
-          </a>
+        </div>
 
-          <a href="profile.php" class="rb-hello" title="My Profile">
-            <i class="fa-regular fa-user"></i> <?= $userName ?>
-          </a>
+        <button type="button" class="site-mobile-toggle" id="siteMobileToggle">
+            <i class="fa-solid fa-bars"></i>
+        </button>
 
-          <a class="rb-btn rb-btn-primary" href="logout.php">
-            <i class="fa-solid fa-right-from-bracket"></i> Log out
-          </a>
-        <?php else: ?>
-          <a class="rb-btn rb-btn-outline" href="login.php">
-            <i class="fa-solid fa-right-to-bracket"></i> Login
-          </a>
+        <div class="site-mobile-panel" id="siteMobilePanel">
+            <div class="site-mobile-links">
+                <a class="<?php echo navActive(['index.php'], $currentPage); ?>" href="index.php">
+                    <i class="fa-solid fa-house"></i> Home
+                </a>
+                <a class="<?php echo navActive(['donor-form.php'], $currentPage); ?>" href="donor-form.php">
+                    <i class="fa-solid fa-hand-holding-droplet"></i> Donate
+                </a>
+                <a class="<?php echo navActive(['request-blood.php'], $currentPage); ?>" href="request-blood.php">
+                    <i class="fa-solid fa-droplet"></i> Request Blood
+                </a>
+                <a class="<?php echo navActive(['my-requests.php'], $currentPage); ?>" href="my-requests.php">
+                    <i class="fa-regular fa-file-lines"></i> My Requests
+                </a>
+                <a class="<?php echo navActive(['donation_history.php'], $currentPage); ?>" href="donation_history.php">
+                    <i class="fa-solid fa-clock-rotate-left"></i> History
+                </a>
+                <a class="<?php echo navActive(['donors.php'], $currentPage); ?>" href="donors.php">
+                    <i class="fa-solid fa-users"></i> Donors
+                </a>
+                <a class="<?php echo navActive(['about.php'], $currentPage); ?>" href="about.php">
+                    <i class="fa-solid fa-circle-info"></i> About
+                </a>
+                <a class="<?php echo navActive(['contact.php'], $currentPage); ?>" href="contact.php">
+                    <i class="fa-solid fa-envelope"></i> Contact
+                </a>
+                <a class="<?php echo navActive(['faq-chatbot.php'], $currentPage); ?>" href="faq-chatbot.php">
+                    <i class="fa-solid fa-robot"></i> FAQ
+                </a>
+            </div>
 
-          <a class="rb-btn rb-btn-primary" href="signup.php">
-            <i class="fa-solid fa-user-plus"></i> Sign up
-          </a>
-        <?php endif; ?>
-      </div>
+            <?php if ($isLoggedIn): ?>
+                <div class="site-mobile-user">
+                    <a href="profile.php"><i class="fa-regular fa-user"></i> Profile</a>
+                    <a href="notifications.php">
+                        <i class="fa-regular fa-bell"></i> Notifications
+                        <?php if ($unreadCount > 0): ?>
+                            <span style="margin-left:auto;font-weight:1000;color:#c62828;"><?php echo $unreadCount > 99 ? '99+' : $unreadCount; ?></span>
+                        <?php endif; ?>
+                    </a>
+                    <a href="logout.php"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+                </div>
+            <?php else: ?>
+                <div class="site-mobile-user">
+                    <a href="login.php"><i class="fa-solid fa-right-to-bracket"></i> Login</a>
+                    <a href="signup.php"><i class="fa-solid fa-user-plus"></i> Sign Up</a>
+                </div>
+            <?php endif; ?>
+        </div>
+    </nav>
+</div>
 
-    </div>
-  </div>
-</header>
+<script>
+(function () {
+    const userBtn = document.getElementById('siteUserBtn');
+    const dropdown = document.getElementById('siteDropdown');
+    const mobileToggle = document.getElementById('siteMobileToggle');
+    const mobilePanel = document.getElementById('siteMobilePanel');
+
+    if (userBtn && dropdown) {
+        userBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            dropdown.classList.toggle('show');
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!dropdown.contains(e.target) && !userBtn.contains(e.target)) {
+                dropdown.classList.remove('show');
+            }
+        });
+    }
+
+    if (mobileToggle && mobilePanel) {
+        mobileToggle.addEventListener('click', function () {
+            mobilePanel.classList.toggle('show');
+        });
+    }
+})();
+</script>

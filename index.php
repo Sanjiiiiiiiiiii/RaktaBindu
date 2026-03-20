@@ -604,6 +604,8 @@ $userName = $isLoggedIn ? htmlspecialchars($_SESSION['user_name'] ?? 'User') : '
 
 <body>
 
+
+
 <?php include "navbar.php"; ?>
 
 <section class="hero">

@@ -261,29 +261,7 @@ function badgeClass($status) {
 </head>
 
 <body>
-
-<header>
-  <div class="container topbar">
-    <div class="brand">
-      <div class="drop"></div>
-      Rakta<span>.Bindu</span>
-    </div>
-
-    <nav>
-      <ul>
-        <li><a href="index.php">Dashboard</a></li>
-        <li><a href="request_blood.php">Request Blood</a></li>
-        <li><a href="donation_history.php" style="color:var(--red); background:rgba(196,22,28,.06);">Donation History</a></li>
-        <li><a href="profile.php">Profile</a></li>
-      </ul>
-    </nav>
-
-    <div class="right-actions">
-      <div class="pill">Hi, <?= $userName ?></div>
-      <a class="btn btn-red" href="logout.php">Logout</a>
-    </div>
-  </div>
-</header>
+<?php include "navbar.php"; ?>
 
 <main class="page">
   <div class="container">
