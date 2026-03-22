@@ -1009,7 +1009,7 @@ select, input[type="text"]{
                                     <th>Urgency</th>
                                     <th>Status</th>
                                     <th>Notes</th>
-                                    <th>Update</th>
+                                   
                                 </tr>
                             </thead>
                             <tbody>
@@ -1059,7 +1059,7 @@ select, input[type="text"]{
                                                 }
                                                 ?>
                                             </select>
-                                            <button type="submit" class="btn btn-primary">Update</button>
+                                            
                                         </form>
                                     </td>
                                 </tr>
