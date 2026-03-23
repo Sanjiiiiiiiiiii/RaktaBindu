@@ -399,7 +399,7 @@ $valAvail = $COL_AV ? ($user[$COL_AV] ?? "Available anytime") : "Available anyti
           <?php endif; ?>
 
           <div class="field">
-            <label>Email (Read Only)</label>
+            <label>Email</label>
             <div class="control">
               <i class="fa-regular fa-envelope"></i>
               <input type="email" value="<?php echo htmlspecialchars($valEmail); ?>" readonly>
