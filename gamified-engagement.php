@@ -6,61 +6,338 @@ ini_set('display_errors', 1);
 date_default_timezone_set("Asia/Kathmandu");
 require_once __DIR__ . "/db.php";
 
-// Optional login check
 if (!isset($_SESSION['user_id'])) {
-  header("Location: login.php");
-  exit();
+    header("Location: login.php");
+    exit();
 }
 
 $uid = (int)($_SESSION['user_id'] ?? 0);
 $userName = $_SESSION['user_name'] ?? 'Donor';
 
-// ===============================
-// Demo / fallback values
-// Replace these later with DB queries
-// ===============================
-$points = 1240;
-$level = "Life Saver";
-$levelProgress = 72; // percent
-$streakDays = 9;
-$rank = 4;
-$totalDonations = 6;
-$totalLivesImpacted = 18;
-
-$badges = [
-  ["title" => "First Drop", "icon" => "fa-droplet", "earned" => true],
-  ["title" => "Hero Donor", "icon" => "fa-medal", "earned" => true],
-  ["title" => "Emergency Responder", "icon" => "fa-bolt", "earned" => true],
-  ["title" => "3 Month Streak", "icon" => "fa-fire", "earned" => false],
-  ["title" => "Community Champion", "icon" => "fa-users", "earned" => false],
-  ["title" => "Legend Donor", "icon" => "fa-crown", "earned" => false],
-];
-
-$missions = [
-  ["title" => "Complete 1 blood donation", "progress" => 100, "reward" => 200],
-  ["title" => "Update donor profile", "progress" => 100, "reward" => 50],
-  ["title" => "Maintain 7-day activity streak", "progress" => 85, "reward" => 120],
-  ["title" => "Respond to an emergency request", "progress" => 40, "reward" => 250],
-];
-
-$leaderboard = [
-  ["name" => "Aarav Shrestha", "points" => 1680, "donations" => 9],
-  ["name" => "Sanjana Rai", "points" => 1540, "donations" => 8],
-  ["name" => "Rohan Karki", "points" => 1410, "donations" => 7],
-  ["name" => $userName, "points" => $points, "donations" => $totalDonations, "me" => true],
-  ["name" => "Nisha Gurung", "points" => 1180, "donations" => 5],
-];
-
-$rewards = [
-  ["title" => "Bronze Donor Certificate", "cost" => 300, "icon" => "fa-certificate"],
-  ["title" => "Hero Profile Frame", "cost" => 500, "icon" => "fa-image"],
-  ["title" => "Priority Event Invite", "cost" => 800, "icon" => "fa-ticket"],
-  ["title" => "Gold Donor Recognition", "cost" => 1200, "icon" => "fa-trophy"],
-];
-
-function e($v) {
-  return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+function e($v): string {
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
+
+/*
+|--------------------------------------------------------------------------
+| Helper functions
+|--------------------------------------------------------------------------
+*/
+
+function calculateLevel(int $points): string {
+    if ($points >= 2000) return "Legend Donor";
+    if ($points >= 1200) return "Life Saver";
+    if ($points >= 700)  return "Hero Donor";
+    if ($points >= 300)  return "Active Donor";
+    if ($points >= 100)  return "Supporter";
+    return "New Donor";
+}
+
+function levelProgress(int $points): int {
+    if ($points >= 2000) return 100;
+
+    if ($points >= 1200) {
+        return (int) min(100, (($points - 1200) / 800) * 100);
+    }
+    if ($points >= 700) {
+        return (int) min(100, (($points - 700) / 500) * 100);
+    }
+    if ($points >= 300) {
+        return (int) min(100, (($points - 300) / 400) * 100);
+    }
+    if ($points >= 100) {
+        return (int) min(100, (($points - 100) / 200) * 100);
+    }
+
+    return (int) min(100, ($points / 100) * 100);
+}
+
+function nextLevelName(int $points): string {
+    if ($points < 100) return "Supporter";
+    if ($points < 300) return "Active Donor";
+    if ($points < 700) return "Hero Donor";
+    if ($points < 1200) return "Life Saver";
+    if ($points < 2000) return "Legend Donor";
+    return "Max Level";
+}
+
+function nextLevelTarget(int $points): int {
+    if ($points < 100) return 100;
+    if ($points < 300) return 300;
+    if ($points < 700) return 700;
+    if ($points < 1200) return 1200;
+    if ($points < 2000) return 2000;
+    return 2000;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Ensure required user columns exist logically in code
+| Assumes these columns exist in users table:
+| points, level, streak_days
+|--------------------------------------------------------------------------
+*/
+
+$points = 0;
+$level = "New Donor";
+$levelProgress = 0;
+$streakDays = 0;
+$rank = 0;
+$totalDonations = 0;
+$totalLivesImpacted = 0;
+$emergencyDonations = 0;
+$totalAcceptedRequests = 0;
+$profileCompleted = false;
+
+/*
+|--------------------------------------------------------------------------
+| Load current user basic gamification data
+|--------------------------------------------------------------------------
+*/
+$stmt = $conn->prepare("
+    SELECT id, firstName, lastName, points, level, streak_days, bloodType, email, phone, location
+    FROM users
+    WHERE id = ?
+    LIMIT 1
+");
+$stmt->bind_param("i", $uid);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if ($user) {
+    $points = (int)($user['points'] ?? 0);
+    $level = trim((string)($user['level'] ?? ''));
+    $streakDays = (int)($user['streak_days'] ?? 0);
+
+    $requiredProfileFields = [
+        trim((string)($user['firstName'] ?? '')),
+        trim((string)($user['lastName'] ?? '')),
+        trim((string)($user['bloodType'] ?? '')),
+        trim((string)($user['email'] ?? '')),
+        trim((string)($user['phone'] ?? '')),
+        trim((string)($user['location'] ?? '')),
+    ];
+
+    $profileCompleted = true;
+    foreach ($requiredProfileFields as $field) {
+        if ($field === '') {
+            $profileCompleted = false;
+            break;
+        }
+    }
+
+    $calculatedLevel = calculateLevel($points);
+
+    if ($level === '' || $level !== $calculatedLevel) {
+        $level = $calculatedLevel;
+        $up = $conn->prepare("UPDATE users SET level = ? WHERE id = ?");
+        $up->bind_param("si", $level, $uid);
+        $up->execute();
+        $up->close();
+    }
+}
+
+$levelProgress = levelProgress($points);
+
+/*
+|--------------------------------------------------------------------------
+| Count donations
+|--------------------------------------------------------------------------
+*/
+$stmt = $conn->prepare("
+    SELECT COUNT(*) AS total
+    FROM donations
+    WHERE user_id = ?
+");
+$stmt->bind_param("i", $uid);
+$stmt->execute();
+$res = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+$totalDonations = (int)($res['total'] ?? 0);
+
+/*
+|--------------------------------------------------------------------------
+| Count emergency donations
+| Assumes donations.availability contains 'Emergency Only'
+|--------------------------------------------------------------------------
+*/
+$stmt = $conn->prepare("
+    SELECT COUNT(*) AS total
+    FROM donations
+    WHERE user_id = ? AND availability = 'Emergency Only'
+");
+$stmt->bind_param("i", $uid);
+$stmt->execute();
+$res = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+$emergencyDonations = (int)($res['total'] ?? 0);
+
+/*
+|--------------------------------------------------------------------------
+| Count accepted blood requests handled by donor
+| Assumes request_matches has donor_id and status
+|--------------------------------------------------------------------------
+*/
+$stmt = $conn->prepare("
+    SELECT COUNT(*) AS total
+    FROM request_matches
+    WHERE donor_id = ? AND status = 'Accepted'
+");
+$stmt->bind_param("i", $uid);
+$stmt->execute();
+$res = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+$totalAcceptedRequests = (int)($res['total'] ?? 0);
+
+/*
+|--------------------------------------------------------------------------
+| Estimated lives impacted
+|--------------------------------------------------------------------------
+*/
+$totalLivesImpacted = $totalDonations * 3;
+
+/*
+|--------------------------------------------------------------------------
+| Compute rank
+|--------------------------------------------------------------------------
+*/
+$result = $conn->query("
+    SELECT id, points
+    FROM users
+    ORDER BY points DESC, id ASC
+");
+
+$rankCounter = 0;
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $rankCounter++;
+        if ((int)$row['id'] === $uid) {
+            $rank = $rankCounter;
+            break;
+        }
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Badges
+|--------------------------------------------------------------------------
+*/
+$badges = [
+    [
+        "title" => "First Drop",
+        "icon" => "fa-droplet",
+        "earned" => ($totalDonations >= 1)
+    ],
+    [
+        "title" => "Hero Donor",
+        "icon" => "fa-medal",
+        "earned" => ($totalDonations >= 5)
+    ],
+    [
+        "title" => "Emergency Responder",
+        "icon" => "fa-bolt",
+        "earned" => ($emergencyDonations >= 3)
+    ],
+    [
+        "title" => "7 Day Streak",
+        "icon" => "fa-fire",
+        "earned" => ($streakDays >= 7)
+    ],
+    [
+        "title" => "Community Champion",
+        "icon" => "fa-users",
+        "earned" => ($points >= 1000)
+    ],
+    [
+        "title" => "Legend Donor",
+        "icon" => "fa-crown",
+        "earned" => ($totalDonations >= 10 && $points >= 1200)
+    ],
+];
+
+/*
+|--------------------------------------------------------------------------
+| Missions
+|--------------------------------------------------------------------------
+*/
+$missions = [
+    [
+        "title" => "Complete your first blood donation",
+        "progress" => ($totalDonations >= 1) ? 100 : 0,
+        "reward" => 100
+    ],
+    [
+        "title" => "Reach 5 total donations",
+        "progress" => min(100, (int)(($totalDonations / 5) * 100)),
+        "reward" => 250
+    ],
+    [
+        "title" => "Complete 3 emergency donations",
+        "progress" => min(100, (int)(($emergencyDonations / 3) * 100)),
+        "reward" => 300
+    ],
+    [
+        "title" => "Maintain 7-day engagement streak",
+        "progress" => min(100, (int)(($streakDays / 7) * 100)),
+        "reward" => 120
+    ],
+];
+
+/*
+|--------------------------------------------------------------------------
+| Leaderboard - top 5 users
+|--------------------------------------------------------------------------
+*/
+$leaderboard = [];
+$sql = "
+    SELECT 
+        u.id,
+        u.firstName,
+        u.lastName,
+        u.points,
+        (
+            SELECT COUNT(*) 
+            FROM donations d
+            WHERE d.user_id = u.id
+        ) AS donations_count
+    FROM users u
+    ORDER BY u.points DESC, u.id ASC
+    LIMIT 5
+";
+$result = $conn->query($sql);
+
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $fullName = trim(($row['firstName'] ?? '') . ' ' . ($row['lastName'] ?? ''));
+        if ($fullName === '') {
+            $fullName = 'Donor';
+        }
+
+        $leaderboard[] = [
+            "name" => $fullName,
+            "points" => (int)($row['points'] ?? 0),
+            "donations" => (int)($row['donations_count'] ?? 0),
+            "me" => ((int)$row['id'] === $uid)
+        ];
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Rewards store
+|--------------------------------------------------------------------------
+*/
+$rewards = [
+    ["title" => "Bronze Donor Certificate", "cost" => 300, "icon" => "fa-certificate"],
+    ["title" => "Hero Profile Frame", "cost" => 500, "icon" => "fa-image"],
+    ["title" => "Priority Event Invite", "cost" => 800, "icon" => "fa-ticket"],
+    ["title" => "Gold Donor Recognition", "cost" => 1200, "icon" => "fa-trophy"],
+];
+
+$nextLevel = nextLevelName($points);
+$nextTarget = nextLevelTarget($points);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -630,8 +907,8 @@ function e($v) {
     <div>
       <h1><i class="fa-solid fa-trophy"></i> Gamified Engagement Hub</h1>
       <p>
-        Stay motivated, earn recognition, complete missions, and grow your impact.
-        Every donation, every response, and every act of consistency makes you a stronger hero in the RaktaBindu community.
+        Welcome back, <?php echo e($userName); ?>. Your journey is powered by real donation activity,
+        earned points, unlocked badges, and your impact on saving lives through RaktaBindu.
       </p>
     </div>
 
@@ -642,7 +919,7 @@ function e($v) {
       </div>
       <div class="hero-stat">
         <div class="label">Current Rank</div>
-        <div class="value">#<?php echo e($rank); ?></div>
+        <div class="value"><?php echo $rank > 0 ? '#' . e($rank) : '-'; ?></div>
       </div>
       <div class="hero-stat">
         <div class="label">Donation Streak</div>
@@ -663,7 +940,7 @@ function e($v) {
       <div class="card-head">
         <div>
           <h2><i class="fa-solid fa-star"></i> Your Donor Journey</h2>
-          <div class="sub">Track your level, progress, and community contribution</div>
+          <div class="sub">Track your real progress based on actual activity</div>
         </div>
       </div>
 
@@ -676,9 +953,16 @@ function e($v) {
           <div class="level-name"><?php echo e($level); ?></div>
           <div class="point-line">
             <span><?php echo e($points); ?> XP collected</span>
-            <span><?php echo e($levelProgress); ?>% to next level</span>
+            <span>
+              <?php echo $points >= 2000 ? 'Maximum level reached' : e($levelProgress) . '% to ' . e($nextLevel); ?>
+            </span>
           </div>
           <div class="progress"><span style="width:<?php echo (int)$levelProgress; ?>%"></span></div>
+
+          <div class="point-line" style="margin-top:10px;">
+            <span>Next target: <?php echo e($nextTarget); ?> XP</span>
+            <span><?php echo $points >= 2000 ? 'Top donor status unlocked' : e($nextLevel); ?></span>
+          </div>
 
           <div class="mini-stats">
             <div class="mini">
@@ -686,8 +970,8 @@ function e($v) {
               <div class="t">Donations</div>
             </div>
             <div class="mini">
-              <div class="n"><?php echo e($streakDays); ?></div>
-              <div class="t">Day Streak</div>
+              <div class="n"><?php echo e($emergencyDonations); ?></div>
+              <div class="t">Emergency Donations</div>
             </div>
             <div class="mini">
               <div class="n"><?php echo e($totalLivesImpacted); ?></div>
@@ -702,7 +986,7 @@ function e($v) {
       <div class="card-head">
         <div>
           <h2><i class="fa-solid fa-award"></i> Badges & Achievements</h2>
-          <div class="sub">Earn special recognition through impact and consistency</div>
+          <div class="sub">Unlocked automatically from real donation milestones</div>
         </div>
       </div>
 
@@ -721,7 +1005,7 @@ function e($v) {
       <div class="card-head">
         <div>
           <h2><i class="fa-solid fa-list-check"></i> Weekly Missions</h2>
-          <div class="sub">Complete tasks to gain bonus points and unlock rewards</div>
+          <div class="sub">Complete real milestones to gain engagement rewards</div>
         </div>
       </div>
 
@@ -747,24 +1031,28 @@ function e($v) {
       <div class="card-head">
         <div>
           <h2><i class="fa-solid fa-ranking-star"></i> Community Leaderboard</h2>
-          <div class="sub">Top contributors in the RaktaBindu network</div>
+          <div class="sub">Top donors ranked by real XP points</div>
         </div>
       </div>
 
       <div class="leaderboard">
-        <?php foreach($leaderboard as $i => $l): ?>
-          <div class="leader <?php echo !empty($l['me']) ? 'me' : ''; ?>">
-            <div class="rank-badge">#<?php echo $i + 1; ?></div>
-            <div>
-              <div class="name"><?php echo e($l['name']); ?></div>
-              <div class="meta"><?php echo e($l['donations']); ?> donations recorded</div>
+        <?php if (!empty($leaderboard)): ?>
+          <?php foreach($leaderboard as $i => $l): ?>
+            <div class="leader <?php echo !empty($l['me']) ? 'me' : ''; ?>">
+              <div class="rank-badge">#<?php echo $i + 1; ?></div>
+              <div>
+                <div class="name"><?php echo e($l['name']); ?></div>
+                <div class="meta"><?php echo e($l['donations']); ?> donations recorded</div>
+              </div>
+              <div class="score">
+                <?php echo e($l['points']); ?> XP
+                <small><?php echo !empty($l['me']) ? 'You' : 'Member'; ?></small>
+              </div>
             </div>
-            <div class="score">
-              <?php echo e($l['points']); ?> XP
-              <small><?php echo !empty($l['me']) ? 'You' : 'Member'; ?></small>
-            </div>
-          </div>
-        <?php endforeach; ?>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <p class="sub">No leaderboard data available yet.</p>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -772,7 +1060,7 @@ function e($v) {
       <div class="card-head">
         <div>
           <h2><i class="fa-solid fa-gift"></i> Rewards Store</h2>
-          <div class="sub">Redeem your points for recognition and perks</div>
+          <div class="sub">Redeem recognition rewards using earned points</div>
         </div>
       </div>
 
@@ -781,9 +1069,18 @@ function e($v) {
           <div class="reward-card">
             <div class="r-icon"><i class="fa-solid <?php echo e($r['icon']); ?>"></i></div>
             <h3><?php echo e($r['title']); ?></h3>
-            <p>Use your engagement points to unlock this community reward.</p>
+            <p>
+              <?php if ($points >= (int)$r['cost']): ?>
+                You have enough points to redeem this reward.
+              <?php else: ?>
+                Earn more points through donations and engagement to unlock this reward.
+              <?php endif; ?>
+            </p>
             <div class="cost"><i class="fa-solid fa-coins"></i> <?php echo e($r['cost']); ?> XP</div>
-            <button class="btn"><i class="fa-solid fa-unlock"></i> Redeem</button>
+            <button class="btn" <?php echo $points < (int)$r['cost'] ? 'disabled style="opacity:.6;cursor:not-allowed;"' : ''; ?>>
+              <i class="fa-solid fa-unlock"></i>
+              <?php echo $points >= (int)$r['cost'] ? 'Redeem' : 'Locked'; ?>
+            </button>
           </div>
         <?php endforeach; ?>
       </div>

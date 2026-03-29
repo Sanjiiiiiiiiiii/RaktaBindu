@@ -249,13 +249,15 @@ if ($isLoggedIn && isset($conn)) {
               <a href="donation_history.php" class="<?php echo ($currentPage === 'donation_history.php') ? 'rb-active' : ''; ?>">Donation History</a>
             </li>
           <?php endif; ?>
-
+<li>
+  <a href="gamified-engagement.php">
+    <i class="fa-solid fa-trophy"></i> Gamified Engagement
+  </a>
+</li>
           <li>
             <a href="index.php#contact">Contact</a>
           </li>
-          <li>
-            <a href="index.php#about">About</a>
-          </li>
+          
         </ul>
       </nav>
 

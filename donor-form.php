@@ -35,6 +35,19 @@ function clean($v): string {
   return trim((string)$v);
 }
 
+function e($v): string {
+  return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
+
+function calculateLevel(int $points): string {
+  if ($points >= 2000) return "Legend Donor";
+  if ($points >= 1200) return "Life Saver";
+  if ($points >= 700)  return "Hero Donor";
+  if ($points >= 300)  return "Active Donor";
+  if ($points >= 100)  return "Supporter";
+  return "New Donor";
+}
+
 // ==============================
 // PREFILL SESSION DATA
 // ==============================
@@ -42,15 +55,53 @@ $prefillName  = $_SESSION['user_name'] ?? "";
 $prefillEmail = $_SESSION['user_email'] ?? "";
 
 // ==============================
-// FETCH DONOR INFO
+// FETCH DONOR INFO + GAMIFICATION
 // ==============================
 $donorBloodGroup = "";
-$userStmt = $conn->prepare("SELECT bloodType FROM users WHERE id = ? LIMIT 1");
+$gamification = [
+  'points' => 0,
+  'level' => 'New Donor',
+  'streak_days' => 0,
+  'badges' => 0,
+  'badge_first_drop' => 0,
+  'badge_hero_donor' => 0,
+  'badge_emergency_responder' => 0,
+  'badge_legend_donor' => 0
+];
+
+$userStmt = $conn->prepare("
+  SELECT
+    bloodType,
+    points,
+    level,
+    streak_days,
+    badge_first_drop,
+    badge_hero_donor,
+    badge_emergency_responder,
+    badge_legend_donor
+  FROM users
+  WHERE id = ?
+  LIMIT 1
+");
 if ($userStmt) {
   $userStmt->bind_param("i", $uid);
   $userStmt->execute();
   $userRow = $userStmt->get_result()->fetch_assoc();
+
   $donorBloodGroup = clean($userRow['bloodType'] ?? "");
+  $gamification['points'] = (int)($userRow['points'] ?? 0);
+  $gamification['level'] = clean($userRow['level'] ?? "New Donor");
+  $gamification['streak_days'] = (int)($userRow['streak_days'] ?? 0);
+  $gamification['badge_first_drop'] = (int)($userRow['badge_first_drop'] ?? 0);
+  $gamification['badge_hero_donor'] = (int)($userRow['badge_hero_donor'] ?? 0);
+  $gamification['badge_emergency_responder'] = (int)($userRow['badge_emergency_responder'] ?? 0);
+  $gamification['badge_legend_donor'] = (int)($userRow['badge_legend_donor'] ?? 0);
+  $gamification['badges'] =
+    $gamification['badge_first_drop'] +
+    $gamification['badge_hero_donor'] +
+    $gamification['badge_emergency_responder'] +
+    $gamification['badge_legend_donor'];
+
   $userStmt->close();
 }
 
@@ -170,6 +221,39 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
           $ins->execute();
           $ins->close();
 
+          // reward donor for accepting a request
+          $acceptPoints = 20;
+
+          $rewardAccept = $conn->prepare("
+            UPDATE users
+            SET points = points + ?
+            WHERE id = ?
+          ");
+          if ($rewardAccept) {
+            $rewardAccept->bind_param("ii", $acceptPoints, $uid);
+            $rewardAccept->execute();
+            $rewardAccept->close();
+          }
+
+          // update level after points increase
+          $ptsStmt = $conn->prepare("SELECT points FROM users WHERE id = ? LIMIT 1");
+          if ($ptsStmt) {
+            $ptsStmt->bind_param("i", $uid);
+            $ptsStmt->execute();
+            $ptsRow = $ptsStmt->get_result()->fetch_assoc();
+            $ptsStmt->close();
+
+            $updatedPoints = (int)($ptsRow['points'] ?? 0);
+            $newLevel = calculateLevel($updatedPoints);
+
+            $lvlStmt = $conn->prepare("UPDATE users SET level = ? WHERE id = ?");
+            if ($lvlStmt) {
+              $lvlStmt->bind_param("si", $newLevel, $uid);
+              $lvlStmt->execute();
+              $lvlStmt->close();
+            }
+          }
+
           if ($requesterId > 0) {
             $notifyRequester = $conn->prepare("
               INSERT INTO notifications
@@ -191,7 +275,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             VALUES (?, 'donation', 'You Accepted a Blood Request', ?, ?, 0, NOW())
           ");
           if ($notifyDonor) {
-            $msgDonor  = "You accepted a {$bloodGroup} blood request at {$location}. Please proceed with donation coordination.";
+            $msgDonor  = "You accepted a {$bloodGroup} blood request at {$location}. You earned {$acceptPoints} points.";
             $linkDonor = "donor-form.php";
             $notifyDonor->bind_param("iss", $uid, $msgDonor, $linkDonor);
             $notifyDonor->execute();
@@ -199,7 +283,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
           }
 
           $conn->commit();
-          $success = "Request accepted successfully.";
+          $success = "Request accepted successfully. You earned {$acceptPoints} points.";
 
         } catch (Throwable $e) {
           $conn->rollback();
@@ -389,7 +473,182 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
           );
 
           if ($stmt->execute()) {
-            $success = "Donation schedule submitted successfully.";
+
+            // =========================
+            // GAMIFICATION SYSTEM
+            // =========================
+            $earnedPoints = ($availability === "Emergency Only") ? 150 : 100;
+
+            $up = $conn->prepare("UPDATE users SET points = points + ? WHERE id = ?");
+            if ($up) {
+              $up->bind_param("ii", $earnedPoints, $uid);
+              $up->execute();
+              $up->close();
+            }
+
+            $get = $conn->prepare("
+              SELECT
+                points,
+                last_activity_date,
+                streak_days,
+                badge_first_drop,
+                badge_hero_donor,
+                badge_emergency_responder,
+                badge_legend_donor
+              FROM users
+              WHERE id = ?
+              LIMIT 1
+            ");
+
+            if ($get) {
+              $get->bind_param("i", $uid);
+              $get->execute();
+              $gRow = $get->get_result()->fetch_assoc();
+              $get->close();
+
+              $totalPoints   = (int)($gRow['points'] ?? 0);
+              $lastActivity  = $gRow['last_activity_date'] ?? null;
+              $currentStreak = (int)($gRow['streak_days'] ?? 0);
+              $today         = date('Y-m-d');
+
+              // STREAK LOGIC
+              $newStreak = 1;
+
+              if (!empty($lastActivity)) {
+                $lastDate  = new DateTime($lastActivity);
+                $todayDate = new DateTime($today);
+                $diffDays  = (int)$lastDate->diff($todayDate)->format('%a');
+
+                if ($lastActivity === $today) {
+                  $newStreak = $currentStreak;
+                } elseif ($diffDays === 1) {
+                  $newStreak = $currentStreak + 1;
+                } else {
+                  $newStreak = 1;
+                }
+              }
+
+              // LEVEL SYSTEM
+              $newLevel = calculateLevel($totalPoints);
+
+              // DONATION COUNTS FOR BADGES
+              $donationCount = 0;
+              $emergencyDonationCount = 0;
+
+              $countDonations = $conn->prepare("
+                SELECT COUNT(*) AS total
+                FROM donations
+                WHERE user_id = ?
+              ");
+              if ($countDonations) {
+                $countDonations->bind_param("i", $uid);
+                $countDonations->execute();
+                $donationRow = $countDonations->get_result()->fetch_assoc();
+                $donationCount = (int)($donationRow['total'] ?? 0);
+                $countDonations->close();
+              }
+
+              $countEmergency = $conn->prepare("
+                SELECT COUNT(*) AS total
+                FROM donations
+                WHERE user_id = ? AND availability = 'Emergency Only'
+              ");
+              if ($countEmergency) {
+                $countEmergency->bind_param("i", $uid);
+                $countEmergency->execute();
+                $emergencyRow = $countEmergency->get_result()->fetch_assoc();
+                $emergencyDonationCount = (int)($emergencyRow['total'] ?? 0);
+                $countEmergency->close();
+              }
+
+              // BADGES
+              $badgeFirstDrop = ((int)($gRow['badge_first_drop'] ?? 0) === 1);
+              $badgeHeroDonor = ((int)($gRow['badge_hero_donor'] ?? 0) === 1);
+              $badgeEmergencyResponder = ((int)($gRow['badge_emergency_responder'] ?? 0) === 1);
+              $badgeLegendDonor = ((int)($gRow['badge_legend_donor'] ?? 0) === 1);
+
+              $newBadges = [];
+
+              if (!$badgeFirstDrop && $donationCount >= 1) {
+                $badgeFirstDrop = true;
+                $newBadges[] = "First Drop";
+              }
+
+              if (!$badgeHeroDonor && $donationCount >= 5) {
+                $badgeHeroDonor = true;
+                $newBadges[] = "Hero Donor";
+              }
+
+              if (!$badgeEmergencyResponder && $emergencyDonationCount >= 3) {
+                $badgeEmergencyResponder = true;
+                $newBadges[] = "Emergency Responder";
+              }
+
+              if (!$badgeLegendDonor && $donationCount >= 10 && $totalPoints >= 2000) {
+                $badgeLegendDonor = true;
+                $newBadges[] = "Legend Donor";
+              }
+
+              $save = $conn->prepare("
+                UPDATE users
+                SET
+                  level = ?,
+                  streak_days = ?,
+                  last_activity_date = ?,
+                  badge_first_drop = ?,
+                  badge_hero_donor = ?,
+                  badge_emergency_responder = ?,
+                  badge_legend_donor = ?
+                WHERE id = ?
+              ");
+              if ($save) {
+                $b1 = $badgeFirstDrop ? 1 : 0;
+                $b2 = $badgeHeroDonor ? 1 : 0;
+                $b3 = $badgeEmergencyResponder ? 1 : 0;
+                $b4 = $badgeLegendDonor ? 1 : 0;
+
+                $save->bind_param(
+                  "sisiiiii",
+                  $newLevel,
+                  $newStreak,
+                  $today,
+                  $b1,
+                  $b2,
+                  $b3,
+                  $b4,
+                  $uid
+                );
+                $save->execute();
+                $save->close();
+              }
+
+              $title = "Donation Scheduled Successfully";
+              $message = "You earned {$earnedPoints} points for scheduling your donation.";
+
+              if (!empty($newBadges)) {
+                $message .= " New badge unlocked: " . implode(", ", $newBadges) . ".";
+              }
+
+              $notify = $conn->prepare("
+                INSERT INTO notifications
+                (user_id, type, title, message, link, is_read, created_at)
+                VALUES (?, 'donation', ?, ?, 'gamified-engagement.php', 0, NOW())
+              ");
+              if ($notify) {
+                $notify->bind_param("iss", $uid, $title, $message);
+                $notify->execute();
+                $notify->close();
+              }
+
+              $success = "Donation scheduled successfully! You earned {$earnedPoints} points";
+              if (!empty($newBadges)) {
+                $success .= " and unlocked: " . implode(", ", $newBadges);
+              }
+              $success .= " 🎉";
+            } else {
+              $success = "Donation scheduled successfully!";
+            }
+
             $_POST = [];
           } else {
             $error = "Failed to submit: " . $stmt->error;
@@ -399,6 +658,43 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
       }
     }
   }
+}
+
+// ==============================
+// REFRESH GAMIFICATION AFTER ACTIONS
+// ==============================
+$refreshStmt = $conn->prepare("
+  SELECT
+    points,
+    level,
+    streak_days,
+    badge_first_drop,
+    badge_hero_donor,
+    badge_emergency_responder,
+    badge_legend_donor
+  FROM users
+  WHERE id = ?
+  LIMIT 1
+");
+if ($refreshStmt) {
+  $refreshStmt->bind_param("i", $uid);
+  $refreshStmt->execute();
+  $rRow = $refreshStmt->get_result()->fetch_assoc();
+  if ($rRow) {
+    $gamification['points'] = (int)($rRow['points'] ?? 0);
+    $gamification['level'] = clean($rRow['level'] ?? "New Donor");
+    $gamification['streak_days'] = (int)($rRow['streak_days'] ?? 0);
+    $gamification['badge_first_drop'] = (int)($rRow['badge_first_drop'] ?? 0);
+    $gamification['badge_hero_donor'] = (int)($rRow['badge_hero_donor'] ?? 0);
+    $gamification['badge_emergency_responder'] = (int)($rRow['badge_emergency_responder'] ?? 0);
+    $gamification['badge_legend_donor'] = (int)($rRow['badge_legend_donor'] ?? 0);
+    $gamification['badges'] =
+      $gamification['badge_first_drop'] +
+      $gamification['badge_hero_donor'] +
+      $gamification['badge_emergency_responder'] +
+      $gamification['badge_legend_donor'];
+  }
+  $refreshStmt->close();
 }
 
 // ==============================
@@ -672,7 +968,7 @@ if ($countStmt) {
 
     .summary-grid{
       display:grid;
-      grid-template-columns:repeat(4,1fr);
+      grid-template-columns:repeat(6,1fr);
       gap:14px;
     }
 
@@ -1282,7 +1578,7 @@ if ($countStmt) {
     </div>
     <div class="hero-chip">
       <i class="fa-solid fa-droplet"></i>
-      Blood Group: <?php echo $donorBloodGroup ? htmlspecialchars($donorBloodGroup) : 'Not Set'; ?>
+      Blood Group: <?php echo $donorBloodGroup ? e($donorBloodGroup) : 'Not Set'; ?>
     </div>
   </div>
 </section>
@@ -1291,11 +1587,11 @@ if ($countStmt) {
   <div class="stack">
 
     <?php if ($success): ?>
-      <div class="alert success"><i class="fa-solid fa-circle-check"></i> <?php echo htmlspecialchars($success); ?></div>
+      <div class="alert success"><i class="fa-solid fa-circle-check"></i> <?php echo e($success); ?></div>
     <?php endif; ?>
 
     <?php if ($error): ?>
-      <div class="alert error"><i class="fa-solid fa-triangle-exclamation"></i> <?php echo htmlspecialchars($error); ?></div>
+      <div class="alert error"><i class="fa-solid fa-triangle-exclamation"></i> <?php echo e($error); ?></div>
     <?php endif; ?>
 
     <div class="card">
@@ -1332,6 +1628,22 @@ if ($countStmt) {
             </div>
             <div class="summary-value"><?php echo (int)$declinedCount; ?></div>
           </div>
+
+          <div class="summary-box">
+            <div class="summary-top">
+              <div class="summary-label">Points</div>
+              <div class="summary-icon"><i class="fa-solid fa-trophy"></i></div>
+            </div>
+            <div class="summary-value"><?php echo (int)$gamification['points']; ?></div>
+          </div>
+
+          <div class="summary-box">
+            <div class="summary-top">
+              <div class="summary-label">Level</div>
+              <div class="summary-icon"><i class="fa-solid fa-star"></i></div>
+            </div>
+            <div class="summary-value" style="font-size:18px;"><?php echo e($gamification['level']); ?></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1344,7 +1656,7 @@ if ($countStmt) {
         <div class="section-sub">Plan your donation appointment before checking new requests.</div>
 
         <form method="POST" autocomplete="off">
-          <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($CSRF); ?>">
+          <input type="hidden" name="csrf_token" value="<?php echo e($CSRF); ?>">
           <input type="hidden" name="action" value="schedule_donation">
 
           <div class="form-grid">
@@ -1352,7 +1664,7 @@ if ($countStmt) {
               <label>Full Name</label>
               <div class="control">
                 <i class="fa-regular fa-id-badge"></i>
-                <input name="full_name" type="text" value="<?php echo htmlspecialchars($_POST['full_name'] ?? $prefillName); ?>" placeholder="Enter full name" required>
+                <input name="full_name" type="text" value="<?php echo e($_POST['full_name'] ?? $prefillName); ?>" placeholder="Enter full name" required>
               </div>
             </div>
 
@@ -1367,7 +1679,7 @@ if ($countStmt) {
                     $groups = ["A+","A-","B+","B-","AB+","AB-","O+","O-"];
                     foreach ($groups as $g) {
                       $sel = ($bg === $g) ? "selected" : "";
-                      echo "<option value='" . htmlspecialchars($g) . "' $sel>" . htmlspecialchars($g) . "</option>";
+                      echo "<option value='" . e($g) . "' $sel>" . e($g) . "</option>";
                     }
                   ?>
                 </select>
@@ -1378,7 +1690,7 @@ if ($countStmt) {
               <label>Contact Number</label>
               <div class="control">
                 <i class="fa-solid fa-phone"></i>
-                <input name="contact" type="text" value="<?php echo htmlspecialchars($_POST['contact'] ?? ""); ?>" placeholder="+977 98XXXXXXXX" required>
+                <input name="contact" type="text" value="<?php echo e($_POST['contact'] ?? ""); ?>" placeholder="+977 98XXXXXXXX" required>
               </div>
             </div>
 
@@ -1386,7 +1698,7 @@ if ($countStmt) {
               <label>Email Address</label>
               <div class="control">
                 <i class="fa-regular fa-envelope"></i>
-                <input name="email" type="email" value="<?php echo htmlspecialchars($_POST['email'] ?? $prefillEmail); ?>" placeholder="you@example.com" required>
+                <input name="email" type="email" value="<?php echo e($_POST['email'] ?? $prefillEmail); ?>" placeholder="you@example.com" required>
               </div>
             </div>
 
@@ -1402,7 +1714,7 @@ if ($countStmt) {
                       $id = (int)$row["id"];
                       $label = ($row["city"] ?? '') . " - " . ($row["name"] ?? '');
                       $sel = ($selectedHospital === $id) ? "selected" : "";
-                      echo "<option value='{$id}' {$sel}>".htmlspecialchars($label)."</option>";
+                      echo "<option value='{$id}' {$sel}>".e($label)."</option>";
                     }
                   ?>
                 </select>
@@ -1414,7 +1726,7 @@ if ($countStmt) {
               <label>Preferred Date</label>
               <div class="control">
                 <i class="fa-regular fa-calendar"></i>
-                <input name="donation_date" type="date" value="<?php echo htmlspecialchars($_POST['donation_date'] ?? ""); ?>" required>
+                <input name="donation_date" type="date" value="<?php echo e($_POST['donation_date'] ?? ""); ?>" required>
               </div>
             </div>
 
@@ -1422,7 +1734,7 @@ if ($countStmt) {
               <label>Preferred Time</label>
               <div class="control">
                 <i class="fa-regular fa-clock"></i>
-                <input name="donation_time" type="time" value="<?php echo htmlspecialchars($_POST['donation_time'] ?? ""); ?>" required>
+                <input name="donation_time" type="time" value="<?php echo e($_POST['donation_time'] ?? ""); ?>" required>
               </div>
             </div>
 
@@ -1460,7 +1772,7 @@ if ($countStmt) {
                     $checked = (is_array($checksSelected) && in_array((string)$i, $checksSelected, true)) ? "checked" : "";
                     echo '<label class="check">
                             <input type="checkbox" name="health_checks[]" value="'.$i.'" '.$checked.'>
-                            <span>'.htmlspecialchars($text).'</span>
+                            <span>'.e($text).'</span>
                           </label>';
                   }
                 ?>
@@ -1483,6 +1795,42 @@ if ($countStmt) {
     <div class="card">
       <div class="card-body">
         <div class="section-title">
+          <h2><i class="fa-solid fa-award"></i> My Badges</h2>
+        </div>
+        <div class="section-sub">Badges unlocked through real donor activity.</div>
+
+        <div class="request-list">
+          <?php if ((int)$gamification['badge_first_drop'] === 1): ?>
+            <div class="request-card"><strong>First Drop</strong><br>Your first donation badge.</div>
+          <?php endif; ?>
+
+          <?php if ((int)$gamification['badge_hero_donor'] === 1): ?>
+            <div class="request-card"><strong>Hero Donor</strong><br>Unlocked after 5 donations.</div>
+          <?php endif; ?>
+
+          <?php if ((int)$gamification['badge_emergency_responder'] === 1): ?>
+            <div class="request-card"><strong>Emergency Responder</strong><br>Unlocked after 3 emergency donations.</div>
+          <?php endif; ?>
+
+          <?php if ((int)$gamification['badge_legend_donor'] === 1): ?>
+            <div class="request-card"><strong>Legend Donor</strong><br>Unlocked after elite donation milestones.</div>
+          <?php endif; ?>
+
+          <?php if (
+            (int)$gamification['badge_first_drop'] === 0 &&
+            (int)$gamification['badge_hero_donor'] === 0 &&
+            (int)$gamification['badge_emergency_responder'] === 0 &&
+            (int)$gamification['badge_legend_donor'] === 0
+          ): ?>
+            <div class="empty">No badges unlocked yet.</div>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <div class="section-title">
           <h2><i class="fa-solid fa-hand-holding-droplet"></i> New Blood Requests</h2>
         </div>
         <div class="section-sub">Requests matching your blood group that still need your response.</div>
@@ -1494,7 +1842,7 @@ if ($countStmt) {
           </div>
         <?php elseif (!$requests): ?>
           <div class="empty">
-            No open requests for <strong><?php echo htmlspecialchars($donorBloodGroup); ?></strong> right now.
+            No open requests for <strong><?php echo e($donorBloodGroup); ?></strong> right now.
           </div>
         <?php else: ?>
           <div class="request-list">
@@ -1508,7 +1856,7 @@ if ($countStmt) {
                 <div class="request-head">
                   <div class="request-info">
                     <div class="request-title">
-                      <span><?php echo htmlspecialchars($r['blood_group']); ?> Blood Request</span>
+                      <span><?php echo e($r['blood_group']); ?> Blood Request</span>
                       <span class="unit-pill"><?php echo (int)$r['quantity']; ?> unit(s)</span>
 
                       <?php if ($isEmergency): ?>
@@ -1523,25 +1871,25 @@ if ($countStmt) {
                     </div>
 
                     <div class="request-meta">
-                      <div><i class="fa-solid fa-location-dot"></i><?php echo htmlspecialchars($r['hospital_location']); ?></div>
-                      <div><i class="fa-regular fa-calendar"></i><?php echo htmlspecialchars($neededDate); ?></div>
+                      <div><i class="fa-solid fa-location-dot"></i><?php echo e($r['hospital_location']); ?></div>
+                      <div><i class="fa-regular fa-calendar"></i><?php echo e($neededDate); ?></div>
                       <?php if ($neededTime !== ""): ?>
-                        <div><i class="fa-regular fa-clock"></i><?php echo htmlspecialchars($neededTime); ?></div>
+                        <div><i class="fa-regular fa-clock"></i><?php echo e($neededTime); ?></div>
                       <?php endif; ?>
-                      <div><i class="fa-regular fa-clock"></i>Posted: <?php echo htmlspecialchars($r['created_at']); ?></div>
+                      <div><i class="fa-regular fa-clock"></i>Posted: <?php echo e($r['created_at']); ?></div>
                     </div>
 
                     <?php if (!empty($r['patient_notes'])): ?>
                       <div class="request-notes">
                         <i class="fa-regular fa-note-sticky"></i>
-                        <?php echo htmlspecialchars($r['patient_notes']); ?>
+                        <?php echo e($r['patient_notes']); ?>
                       </div>
                     <?php endif; ?>
                   </div>
 
                   <div class="request-actions">
                     <form method="POST">
-                      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($CSRF); ?>">
+                      <input type="hidden" name="csrf_token" value="<?php echo e($CSRF); ?>">
                       <input type="hidden" name="action" value="accept_request">
                       <input type="hidden" name="request_id" value="<?php echo (int)$r['id']; ?>">
                       <button class="btn btn-primary" type="submit">
@@ -1550,7 +1898,7 @@ if ($countStmt) {
                     </form>
 
                     <form method="POST">
-                      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($CSRF); ?>">
+                      <input type="hidden" name="csrf_token" value="<?php echo e($CSRF); ?>">
                       <input type="hidden" name="action" value="decline_request">
                       <input type="hidden" name="request_id" value="<?php echo (int)$r['id']; ?>">
                       <button class="btn btn-light" type="submit">
@@ -1590,17 +1938,17 @@ if ($countStmt) {
 
                   <div>
                     <div class="activity-title">
-                      <?php echo htmlspecialchars($rv['blood_group']); ?> • <?php echo (int)$rv['quantity']; ?> unit(s)
+                      <?php echo e($rv['blood_group']); ?> • <?php echo (int)$rv['quantity']; ?> unit(s)
                     </div>
                     <div class="activity-meta">
-                      <?php echo htmlspecialchars($rv['hospital_location']); ?>
-                      • <?php echo htmlspecialchars($rv['urgency']); ?>
-                      • <?php echo htmlspecialchars(($rv['needed_date'] ?: 'N/A')); ?>
+                      <?php echo e($rv['hospital_location']); ?>
+                      • <?php echo e($rv['urgency']); ?>
+                      • <?php echo e(($rv['needed_date'] ?: 'N/A')); ?>
                       <?php if (!empty($rv['needed_time'])): ?>
-                        • <?php echo htmlspecialchars($rv['needed_time']); ?>
+                        • <?php echo e($rv['needed_time']); ?>
                       <?php endif; ?>
                       <?php if ($reviewedOn !== ""): ?>
-                        • Reviewed on <?php echo htmlspecialchars($reviewedOn); ?>
+                        • Reviewed on <?php echo e($reviewedOn); ?>
                       <?php endif; ?>
                     </div>
                   </div>
@@ -1614,7 +1962,7 @@ if ($countStmt) {
                   <?php endif; ?>
 
                   <form method="POST" style="margin:0;">
-                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($CSRF); ?>">
+                    <input type="hidden" name="csrf_token" value="<?php echo e($CSRF); ?>">
                     <input type="hidden" name="action" value="hide_review">
                     <input type="hidden" name="match_id" value="<?php echo (int)$rv['match_id']; ?>">
                     <button type="submit" class="mini-remove" title="Remove from dashboard">
@@ -1644,26 +1992,26 @@ if ($countStmt) {
               <div class="request-card">
                 <div class="request-info">
                   <div class="request-title">
-                    <span><?php echo htmlspecialchars($c['blood_group']); ?> Request</span>
+                    <span><?php echo e($c['blood_group']); ?> Request</span>
                     <span class="unit-pill">Accepted</span>
                   </div>
 
                   <div class="request-meta">
-                    <div><i class="fa-solid fa-user"></i><?php echo htmlspecialchars(trim($c['requester_name']) ?: 'Requester'); ?></div>
-                    <div><i class="fa-solid fa-location-dot"></i><?php echo htmlspecialchars($c['hospital_location']); ?></div>
-                    <div><i class="fa-regular fa-envelope"></i><?php echo htmlspecialchars($c['requester_email'] ?: 'Not available'); ?></div>
-                    <div><i class="fa-solid fa-phone"></i><?php echo htmlspecialchars($c['requester_phone'] ?: 'Not available'); ?></div>
+                    <div><i class="fa-solid fa-user"></i><?php echo e(trim($c['requester_name']) ?: 'Requester'); ?></div>
+                    <div><i class="fa-solid fa-location-dot"></i><?php echo e($c['hospital_location']); ?></div>
+                    <div><i class="fa-regular fa-envelope"></i><?php echo e($c['requester_email'] ?: 'Not available'); ?></div>
+                    <div><i class="fa-solid fa-phone"></i><?php echo e($c['requester_phone'] ?: 'Not available'); ?></div>
                   </div>
 
                   <div class="request-actions">
                     <?php if (!empty($c['requester_phone'])): ?>
-                      <a class="btn btn-primary" href="tel:<?php echo htmlspecialchars($c['requester_phone']); ?>">
+                      <a class="btn btn-primary" href="tel:<?php echo e($c['requester_phone']); ?>">
                         <i class="fa-solid fa-phone"></i> Call
                       </a>
                     <?php endif; ?>
 
                     <?php if (!empty($c['requester_email'])): ?>
-                      <a class="btn btn-light" href="mailto:<?php echo htmlspecialchars($c['requester_email']); ?>">
+                      <a class="btn btn-light" href="mailto:<?php echo e($c['requester_email']); ?>">
                         <i class="fa-regular fa-envelope"></i> Email
                       </a>
                     <?php endif; ?>
