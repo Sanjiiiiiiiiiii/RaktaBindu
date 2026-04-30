@@ -273,7 +273,7 @@ function badgeClass($status) {
           View your past donations, status updates, and donation details in one place.
         </p>
       </div>
-      <a class="btn" href="index.php">← Back to Dashboard</a>
+      <a class="btn" href="index.php">← Go Back to Dashboard</a>
     </div>
 
     <div class="grid">

@@ -1071,7 +1071,7 @@ $nextTarget = nextLevelTarget($points);
             <h3><?php echo e($r['title']); ?></h3>
             <p>
               <?php if ($points >= (int)$r['cost']): ?>
-                You have enough points to redeem this reward.
+                You have got enough points to redeem this reward.
               <?php else: ?>
                 Earn more points through donations and engagement to unlock this reward.
               <?php endif; ?>
